@@ -240,24 +240,68 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 
     sock.ev.on('creds.update', saveCreds);
 
+    // Helper function to check if chat is a group
+    const isGroup = (jid) => jid.endsWith('@g.us');
+
+    // Helper function to check if bot is admin
+    const isBotAdmin = async (sock, groupJid) => {
+        try {
+            const groupMetadata = await sock.groupMetadata(groupJid);
+            const botNumber = sock.user.id.split(':')[0];
+            const botJid = botNumber + '@s.whatsapp.net';
+            const participant = groupMetadata.participants.find(p => p.id === botJid);
+            return participant?.admin === 'admin' || participant?.admin === 'superadmin';
+        } catch {
+            return false;
+        }
+    };
+
+    // Helper function to check if user is admin
+    const isUserAdmin = async (sock, groupJid, userJid) => {
+        try {
+            const groupMetadata = await sock.groupMetadata(groupJid);
+            const participant = groupMetadata.participants.find(p => p.id === userJid);
+            return participant?.admin === 'admin' || participant?.admin === 'superadmin';
+        } catch {
+            return false;
+        }
+    };
+
     // Register Commands
     registerCommand('menu', 'Display bot menu with all commands', async (sock, msg) => {
-        const commandList = Array.from(commands.entries())
-            .map(([name]) => `${config.prefix}${name}`)
-            .join('\n');
+        const menuText = `╭──────────────────────╮
+│                                      │
+│      *《 FIAZZYMD 》*      │
+│                                      │
+╰──────────────────────╯
 
-        const menuText = `╭─────────────────╮
-│ *${config.botName}*
-╰─────────────────╯
+╭─────────────────────╮
+│  📌 *BOT INFORMATION*  │
+╰─────────────────────╯
+│ *Prefix:* ${config.prefix}
+│ *Mode:* ${config.botMode.toUpperCase()}
+│ *Commands:* ${commands.size}
+│ *Version:* ${config.botVersion}
+╰─────────────────────╯
 
-📌 *Bot Information*
-• Prefix: ${config.prefix}
-• Mode: ${config.botMode.toUpperCase()}
-• Commands: ${commands.size}
-• Version: ${config.botVersion}
+╭──────────────────────╮
+│  👥 *GROUP COMMANDS*  │
+╰──────────────────────╯
+│ ${config.prefix}add
+│ ${config.prefix}kick
+│ ${config.prefix}promote
+│ ${config.prefix}demote
+│ ${config.prefix}tag
+│ ${config.prefix}tagall
+╰──────────────────────╯
 
-📋 *Available Commands*
-${commandList}
+╭──────────────────────╮
+│  ⚙️ *GENERAL COMMANDS*  │
+╰──────────────────────╯
+│ ${config.prefix}ping
+│ ${config.prefix}help
+│ ${config.prefix}session
+╰──────────────────────╯
 
 💡 Type ${config.prefix}help <command> for details
 
@@ -297,6 +341,278 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             console.log('📤 Fallback: Sending menu as text...');
             await sock.sendMessage(msg.key.remoteJid, { text: menuText });
             console.log('✅ Menu sent successfully as text (fallback)');
+        }
+    });
+
+    // Group Commands
+    registerCommand('add', 'Add a member to the group', async (sock, msg, args) => {
+        if (!isGroup(msg.key.remoteJid)) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is only for groups!'
+            });
+        }
+
+        if (!(await isBotAdmin(sock, msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Bot is not admin! Please make the bot admin first.'
+            });
+        }
+
+        if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant || msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Only admins can use this command!'
+            });
+        }
+
+        if (args.length === 0) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Usage: ${config.prefix}add <number>\n\nExample: ${config.prefix}add 2349012345678`
+            });
+        }
+
+        const number = args[0].replace(/[^0-9]/g, '');
+        if (!number) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Please provide a valid phone number!'
+            });
+        }
+
+        try {
+            await sock.groupParticipantsUpdate(msg.key.remoteJid, [`${number}@s.whatsapp.net`], 'add');
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `✅ Successfully added +${number} to the group!`
+            });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to add member: ${error.message}`
+            });
+        }
+    });
+
+    registerCommand('kick', 'Remove a member from the group', async (sock, msg, args) => {
+        if (!isGroup(msg.key.remoteJid)) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is only for groups!'
+            });
+        }
+
+        if (!(await isBotAdmin(sock, msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Bot is not admin! Please make the bot admin first.'
+            });
+        }
+
+        if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant || msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Only admins can use this command!'
+            });
+        }
+
+        let targetJid;
+
+        // Check if replying to a message
+        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
+        } else if (args.length > 0) {
+            const number = args[0].replace(/[^0-9]/g, '');
+            targetJid = `${number}@s.whatsapp.net`;
+        } else {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Usage: Reply to a message with ${config.prefix}kick or use ${config.prefix}kick <number>`
+            });
+        }
+
+        try {
+            await sock.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'remove');
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `✅ Successfully removed @${targetJid.split('@')[0]} from the group!`,
+                mentions: [targetJid]
+            });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to remove member: ${error.message}`
+            });
+        }
+    });
+
+    registerCommand('promote', 'Promote a member to admin', async (sock, msg, args) => {
+        if (!isGroup(msg.key.remoteJid)) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is only for groups!'
+            });
+        }
+
+        if (!(await isBotAdmin(sock, msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Bot is not admin! Please make the bot admin first.'
+            });
+        }
+
+        if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant || msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Only admins can use this command!'
+            });
+        }
+
+        let targetJid;
+
+        // Check if replying to a message
+        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
+        } else if (args.length > 0) {
+            const number = args[0].replace(/[^0-9]/g, '');
+            targetJid = `${number}@s.whatsapp.net`;
+        } else {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Usage: Reply to a message with ${config.prefix}promote or use ${config.prefix}promote <number>`
+            });
+        }
+
+        try {
+            await sock.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'promote');
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `✅ Successfully promoted @${targetJid.split('@')[0]} to admin!`,
+                mentions: [targetJid]
+            });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to promote member: ${error.message}`
+            });
+        }
+    });
+
+    registerCommand('demote', 'Demote an admin to member', async (sock, msg, args) => {
+        if (!isGroup(msg.key.remoteJid)) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is only for groups!'
+            });
+        }
+
+        if (!(await isBotAdmin(sock, msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Bot is not admin! Please make the bot admin first.'
+            });
+        }
+
+        if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant || msg.key.remoteJid))) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Only admins can use this command!'
+            });
+        }
+
+        let targetJid;
+
+        // Check if replying to a message
+        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
+        } else if (args.length > 0) {
+            const number = args[0].replace(/[^0-9]/g, '');
+            targetJid = `${number}@s.whatsapp.net`;
+        } else {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Usage: Reply to a message with ${config.prefix}demote or use ${config.prefix}demote <number>`
+            });
+        }
+
+        try {
+            await sock.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'demote');
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `✅ Successfully demoted @${targetJid.split('@')[0]} to member!`,
+                mentions: [targetJid]
+            });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to demote member: ${error.message}`
+            });
+        }
+    });
+
+    registerCommand('tag', 'Tag all members with a message', async (sock, msg, args) => {
+        if (!isGroup(msg.key.remoteJid)) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is only for groups!'
+            });
+        }
+
+        // Get sender number
+        const senderNumber = msg.key.remoteJid.split('@')[0];
+        const isOwner = senderNumber === config.ownerNumber;
+
+        // Check permissions: Owner can always use, others only in public mode
+        if (!isOwner && config.botMode === 'private') {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is restricted to bot owner in private mode!'
+            });
+        }
+
+        let tagMessage = args.join(' ');
+
+        // Check if replying to a message
+        if (!tagMessage && msg.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
+            const quotedText = msg.message.extendedTextMessage.contextInfo.quotedMessage.conversation ||
+                              msg.message.extendedTextMessage.contextInfo.quotedMessage.extendedTextMessage?.text;
+            tagMessage = quotedText || 'Tagged by admin';
+        }
+
+        if (!tagMessage) {
+            tagMessage = 'Tagged by admin';
+        }
+
+        try {
+            const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
+            const participants = groupMetadata.participants.map(p => p.id);
+
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `📢 *${tagMessage}*`,
+                mentions: participants
+            });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to tag members: ${error.message}`
+            });
+        }
+    });
+
+    registerCommand('tagall', 'List all members with tags', async (sock, msg) => {
+        if (!isGroup(msg.key.remoteJid)) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is only for groups!'
+            });
+        }
+
+        // Get sender number
+        const senderNumber = msg.key.remoteJid.split('@')[0];
+        const isOwner = senderNumber === config.ownerNumber;
+
+        // Check permissions: Owner can always use, others only in public mode
+        if (!isOwner && config.botMode === 'private') {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is restricted to bot owner in private mode!'
+            });
+        }
+
+        try {
+            const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
+            const participants = groupMetadata.participants;
+
+            let text = `╭─────────────────────╮\n`;
+            text += `│  👥 *GROUP MEMBERS*  │\n`;
+            text += `╰─────────────────────╯\n\n`;
+
+            participants.forEach((participant, index) => {
+                text += `${index + 1}. @${participant.id.split('@')[0]}\n`;
+            });
+
+            text += `\n*Total Members:* ${participants.length}`;
+
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: text,
+                mentions: participants.map(p => p.id)
+            });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to list members: ${error.message}`
+            });
         }
     });
 
