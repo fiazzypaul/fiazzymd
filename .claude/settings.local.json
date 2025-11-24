@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"c:\\Users\\fiazzy\\Documents\\fiazzymd\")",
+      "Bash(pnpm add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

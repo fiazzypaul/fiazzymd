@@ -1,0 +1,19 @@
+{
+  "name": "fiazzymd",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "clean": "rmdir /s /q sessions auth_info_baileys 2>nul || echo Cleaned up sessions"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.23.0",
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc.9",
+    "pino": "^10.1.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}
