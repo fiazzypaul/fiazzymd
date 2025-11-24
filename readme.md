@@ -6,12 +6,14 @@ A WhatsApp bot built with Baileys that supports both QR code and pairing code au
 
 - Connect via QR Code or Pairing Code
 - Multi-session management (run multiple WhatsApp accounts)
+- Auto-connect to single session (no prompts!)
 - Auto-reply to messages
 - Built-in commands (ping, hi, help, session)
 - Persistent authentication sessions
-- Automatic reconnection
+- Automatic reconnection with exponential backoff
 - Message logging
 - Clean QR code display (no deprecation warnings)
+- Stable connection (no error 500 loops!)
 
 ## Installation
 
@@ -176,17 +178,27 @@ You can add as many custom commands as you want!
 
 **Connection closed repeatedly (Error 500/515):**
 - ✅ Fixed! The bot now uses stable connection settings
-- Changes made to fix error 500:
-  - ❌ Removed `fetchLatestBaileysVersion()` (causes 90% of 500 errors)
+- Key fixes applied:
+  - ❌ Removed `fetchLatestBaileysVersion()` - This causes 90% of error 500 issues
   - ✅ Using real browser info: `Chrome (Linux)`
   - ✅ Increased keepalive to 45 seconds
-  - ✅ Wait 10 seconds before sending first message
+  - ✅ Disabled `syncFullHistory` to reduce load
+  - ✅ **Welcome message disabled by default** - This was causing most disconnections!
   - ✅ Exponential backoff (3s, 6s, 9s, 12s, 15s) for reconnections
   - ✅ Max 5 reconnection attempts to prevent rate limiting
-- If still getting errors:
-  - Delete the session folder: `rmdir /s /q sessions\session_name`
-  - Reconnect with fresh QR/pairing code
-  - Check Windows system time: `w32tm /resync` in CMD
+
+**Important: Welcome Message**
+- The automatic welcome message is **disabled by default** to prevent error 500
+- Sending messages immediately after connection causes WhatsApp to disconnect
+- If you want to enable it, edit `index.js` around line 193 and uncomment the code
+- If enabled, it waits 20 seconds before sending (but still might cause issues)
+- **Recommendation:** Keep it disabled and just send yourself a "ping" message to test
+
+**If still getting errors:**
+- Delete the session folder: `rmdir /s /q sessions\session_name`
+- Reconnect with fresh QR/pairing code
+- Check Windows system time: `w32tm /resync` in CMD
+- Make sure welcome message is disabled
 
 **General connection issues:**
 - Check your internet connection

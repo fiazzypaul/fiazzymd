@@ -117,6 +117,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
         defaultQueryTimeoutMs: 60000,
         keepAliveIntervalMs: 45000,
         markOnlineOnConnect: false,
+        syncFullHistory: false,
+        getMessage: async () => undefined,
         // Remove printQRInTerminal to avoid deprecation warning
     });
 
@@ -186,9 +188,12 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             console.log('║   ✅ Connected Successfully!        ║');
             console.log('╚════════════════════════════════════╝\n');
             console.log('📞 Bot is ready to receive messages\n');
+            console.log('💡 Bot is active and ready to respond to commands!\n');
 
-            // Wait 10 seconds before sending welcome message to ensure stable connection
-            console.log('⏳ Waiting for connection to stabilize...\n');
+            // Optional: Send welcome message after 20 seconds (disabled by default to prevent 500 errors)
+            // Uncomment the code below if you want to enable welcome messages
+            /*
+            console.log('⏳ Will send welcome message in 20 seconds...\n');
             setTimeout(async () => {
                 try {
                     const userJid = sock.user.id.replace(':', '@s.whatsapp.net');
@@ -210,9 +215,9 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
                     console.log('📨 Welcome message sent to your DM!\n');
                 } catch (error) {
                     console.error('⚠️  Could not send welcome DM:', error.message);
-                    console.log('💡 Connection is stable, but message failed. Bot is still running.\n');
                 }
-            }, 10000); // Wait 10 seconds before sending first message
+            }, 20000); // Wait 20 seconds before sending first message
+            */
         }
     });
 
