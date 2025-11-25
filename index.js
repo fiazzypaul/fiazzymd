@@ -67,7 +67,6 @@ const messageStore = new Map();
 const antiLinkSettings = new Map();
 const warnLimits = new Map();
 const warnCounts = new Map();
-let pairingRequested = false;
 
 // Initialize auto view-once from .env
 if (process.env.AUTO_VIEW_ONCE === 'true') {
@@ -176,8 +175,6 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
     const { version } = await fetchLatestBaileysVersion();
 
-    pairingRequested = false;
-
     const sock = makeWASocket({
         logger: pino({ level: 'silent' }),
         auth: state,
@@ -195,6 +192,45 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
         },
     });
 
+    // Handle pairing code BEFORE connection events - Official Baileys approach
+    if (usePairingCode && !sock.authState.creds.registered) {
+        const phoneNumber = await question('\n📱 Enter your WhatsApp phone number:\n   (with country code, no + or spaces)\n   Example: 2349012345678\n\n   Number: ');
+        const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+
+        if (!cleanNumber || cleanNumber.length < 10) {
+            console.error('\n❌ Invalid phone number format');
+            console.log('💡 Number must be in E.164 format without +');
+            console.log('   Example: 2349012345678 (not +234 901 234 5678)\n');
+            rl.close();
+            process.exit(1);
+        }
+
+        console.log('\n🔄 Requesting pairing code for:', cleanNumber);
+        try {
+            const code = await sock.requestPairingCode(cleanNumber);
+            console.log('\n╔════════════════════════════════╗');
+            console.log('║                                ║');
+            console.log(`║    📟 PAIRING CODE: ${code}     ║`);
+            console.log('║                                ║');
+            console.log('╚════════════════════════════════╝\n');
+            console.log('📌 Steps to link your device:\n');
+            console.log('   1. Open WhatsApp on your phone');
+            console.log('   2. Tap Settings → Linked Devices');
+            console.log('   3. Tap "Link a Device"');
+            console.log('   4. Tap "Link with phone number instead"');
+            console.log('   5. Enter the code above: ' + code + '\n');
+            console.log('⏳ Waiting for connection... (Bot will auto-connect)\n');
+        } catch (error) {
+            console.error('\n❌ Failed to request pairing code:', error.message);
+            console.log('\n💡 Troubleshooting:');
+            console.log('   • Verify phone number format (must include country code)');
+            console.log('   • Delete session folder if code doesn\'t match number');
+            console.log('   • Wait 10 minutes if too many attempts\n');
+            rl.close();
+            process.exit(1);
+        }
+    }
+
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
 
@@ -206,44 +242,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             console.log('\n'); // Add spacing after QR
         }
 
-        if (usePairingCode && !sock.authState.creds.registered && (connection === 'connecting' || !!qr) && !pairingRequested) {
-            pairingRequested = true;
-            const phoneNumber = await question('\n📱 Enter your WhatsApp phone number:\n   (with country code, no + or spaces)\n   Example: 2349012345678\n\n   Number: ');
-            const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
-
-            if (!cleanNumber || cleanNumber.length < 10) {
-                console.error('\n❌ Invalid phone number format');
-                console.log('💡 Number must be in E.164 format without +');
-                console.log('   Example: 2349012345678 (not +234 901 234 5678)\n');
-                rl.close();
-                process.exit(1);
-            }
-
-            console.log('\n🔄 Requesting pairing code for:', cleanNumber);
-            try {
-                const code = await sock.requestPairingCode(cleanNumber);
-                console.log('\n╔════════════════════════════════╗');
-                console.log('║                                ║');
-                console.log(`║    📟 PAIRING CODE: ${code}     ║`);
-                console.log('║                                ║');
-                console.log('╚════════════════════════════════╝\n');
-                console.log('📌 Steps to link your device:\n');
-                console.log('   1. Open WhatsApp on your phone');
-                console.log('   2. Tap Settings → Linked Devices');
-                console.log('   3. Tap "Link a Device"');
-                console.log('   4. Tap "Link with phone number instead"');
-                console.log('   5. Enter the code above: ' + code + '\n');
-                console.log('⏳ Waiting for connection... (Bot will auto-connect)\n');
-            } catch (error) {
-                console.error('\n❌ Failed to request pairing code:', error.message);
-                console.log('\n💡 Troubleshooting:');
-                console.log('   • Verify phone number format (must include country code)');
-                console.log('   • Delete session folder if code doesn\'t match number');
-                console.log('   • Wait 10 minutes if too many attempts\n');
-                rl.close();
-                process.exit(1);
-            }
-        } else if (connection === 'close') {
+        if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
 
             console.log('❌ Connection closed.');
