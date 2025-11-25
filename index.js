@@ -278,34 +278,37 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             console.log('📞 Bot is ready to receive messages\n');
             console.log('💡 Bot is active and ready to respond to commands!\n');
 
-            // Optional: Send welcome message after 20 seconds (disabled by default to prevent 500 errors)
-            // Uncomment the code below if you want to enable welcome messages
-            /*
+            // Send welcome message after 20 seconds
             console.log('⏳ Will send welcome message in 20 seconds...\n');
             setTimeout(async () => {
                 try {
-                    const userJid = sock.user.id.replace(':', '@s.whatsapp.net');
+                    // Get user's own JID (phone number)
+                    const userJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+
                     await sock.sendMessage(userJid, {
-                        text: '🎉 *FiazzyMD Bot Connected Successfully!*\n\n' +
-                              '✅ Your bot is now online and ready to respond to messages.\n\n' +
-                              '📱 Connection Details:\n' +
-                              `• Device: ${sock.user.name || 'FiazzyMD'}\n` +
+                        text: '╭────────────────────╮\n' +
+                              '│  🎉 *BOT CONNECTED*  │\n' +
+                              '╰────────────────────╯\n\n' +
+                              '✅ *FiazzyMD is now online!*\n\n' +
+                              '📱 *Connection Details:*\n' +
+                              `• Device: ${sock.user.name || config.botName}\n` +
                               `• Number: ${sock.user.id.split(':')[0]}\n` +
                               `• Session: ${sessionManager.currentSession}\n` +
+                              `• Mode: ${config.botMode.toUpperCase()}\n` +
                               `• Method: ${usePairingCode ? 'Pairing Code' : 'QR Code'}\n\n` +
-                              '🤖 Available Commands:\n' +
-                              '• ping - Check bot status\n' +
-                              '• hi/hello - Get a greeting\n' +
-                              '• help - Show help menu\n' +
-                              '• session - View session info\n\n' +
-                              '💡 The bot will auto-reply to these commands from any chat!'
+                              '🤖 *Quick Commands:*\n' +
+                              `• ${config.prefix}menu - View all commands\n` +
+                              `• ${config.prefix}ping - Check bot status\n` +
+                              `• ${config.prefix}help - Get help\n` +
+                              `• ${config.prefix}session - Session info\n\n` +
+                              '💡 Bot is ready to respond in all chats!'
                     });
-                    console.log('📨 Welcome message sent to your DM!\n');
+                    console.log('✅ Welcome message sent to your DM!\n');
                 } catch (error) {
                     console.error('⚠️  Could not send welcome DM:', error.message);
+                    console.log('💡 This is normal - bot will still work fine\n');
                 }
             }, 20000); // Wait 20 seconds before sending first message
-            */
         }
     });
 
