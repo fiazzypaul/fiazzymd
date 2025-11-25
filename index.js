@@ -24,6 +24,39 @@ const rl = readline.createInterface({
 
 const question = (text) => new Promise((resolve) => rl.question(text, resolve));
 
+// Helper function to update .env file
+function updateEnvFile(key, value) {
+    try {
+        const envPath = path.join(__dirname, '.env');
+        let envContent = '';
+
+        if (fs.existsSync(envPath)) {
+            envContent = fs.readFileSync(envPath, 'utf8');
+        }
+
+        const lines = envContent.split('\n');
+        let found = false;
+
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].startsWith(`${key}=`)) {
+                lines[i] = `${key}=${value}`;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found) {
+            lines.push(`${key}=${value}`);
+        }
+
+        fs.writeFileSync(envPath, lines.join('\n'), 'utf8');
+        return true;
+    } catch (error) {
+        console.error('Error updating .env file:', error);
+        return false;
+    }
+}
+
 // Command Registry
 const commands = new Map();
 
@@ -31,6 +64,14 @@ const commands = new Map();
 const muteTimers = new Map();
 const autoViewOnceChats = new Set();
 const messageStore = new Map();
+const antiLinkSettings = new Map();
+const warnLimits = new Map();
+const warnCounts = new Map();
+
+// Initialize auto view-once from .env
+if (process.env.AUTO_VIEW_ONCE === 'true') {
+    autoViewOnceChats.add('global');
+}
 
 function registerCommand(name, description, handler) {
     commands.set(name, { description, handler });
@@ -151,23 +192,25 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 
     // Handle pairing code
     if (usePairingCode && !sock.authState.creds.registered) {
-        const phoneNumber = await question('\nPlease enter your WhatsApp phone number (with country code, no + or spaces): ');
-        const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+        // Wait for socket to be ready before requesting pairing code
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        console.log('\n🔄 Requesting pairing code for:', cleanNumber);
+        try {
+            const phoneNumber = await question('\nPlease enter your WhatsApp phone number (with country code, no + or spaces): ');
+            const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
 
-        setTimeout(async () => {
-            try {
-                const code = await sock.requestPairingCode(cleanNumber);
-                console.log('\n╔══════════════════════════╗');
-                console.log(`║  📱 Pairing Code: ${code}  ║`);
-                console.log('╚══════════════════════════╝\n');
-                console.log('Enter this code in WhatsApp:');
-                console.log('Settings > Linked Devices > Link a Device > Link with phone number instead\n');
-            } catch (error) {
-                console.error('❌ Error requesting pairing code:', error.message);
-            }
-        }, 3000);
+            console.log('\n🔄 Requesting pairing code for:', cleanNumber);
+
+            const code = await sock.requestPairingCode(cleanNumber);
+            console.log('\n╔══════════════════════════╗');
+            console.log(`║  📱 Pairing Code: ${code}  ║`);
+            console.log('╚══════════════════════════╝\n');
+            console.log('Enter this code in WhatsApp:');
+            console.log('Settings > Linked Devices > Link a Device > Link with phone number instead\n');
+        } catch (error) {
+            console.error('❌ Error requesting pairing code:', error.message);
+            console.log('💡 Make sure you entered a valid phone number with country code\n');
+        }
     }
 
     sock.ev.on('connection.update', async (update) => {
@@ -334,6 +377,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}tagall
 │ ${config.prefix}mute
 │ ${config.prefix}unmute
+│ ${config.prefix}warn
+│ ${config.prefix}resetwarn
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -349,6 +394,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │  🧩 *VAR COMMANDS*     │
 ╰──────────────────────╯
 │ ${config.prefix}autoviewonce
+│ ${config.prefix}warnlimit
+│ ${config.prefix}antilink
 ╰──────────────────────╯
 
 💡 Type ${config.prefix}help <command> for details
@@ -630,23 +677,6 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
     });
 
     registerCommand('tag', 'Tag all members with a message', async (sock, msg, args) => {
-        if (!isGroup(msg.key.remoteJid)) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is only for groups!'
-            });
-        }
-
-        // Get sender number
-        const senderNumber = msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
-
-        // Check permissions: Owner can always use, others only in public mode
-        if (!isOwner && config.botMode === 'private') {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is restricted to bot owner in private mode!'
-            });
-        }
-
         let tagMessage = args.join(' ');
 
         // Check if replying to a message
@@ -676,23 +706,6 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
     });
 
     registerCommand('tagall', 'List all members with tags', async (sock, msg) => {
-        if (!isGroup(msg.key.remoteJid)) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is only for groups!'
-            });
-        }
-
-        // Get sender number
-        const senderNumber = msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
-
-        // Check permissions: Owner can always use, others only in public mode
-        if (!isOwner && config.botMode === 'private') {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is restricted to bot owner in private mode!'
-            });
-        }
-
         try {
             const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
             const participants = groupMetadata.participants;
@@ -776,19 +789,30 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         }
     });
 
-    registerCommand('autoviewonce', 'Toggle auto-open of view-once media', async (sock, msg, args) => {
+    registerCommand('autoviewonce', 'Toggle auto-open of view-once media globally', async (sock, msg, args) => {
         const arg = (args[0] || '').toLowerCase();
         if (arg === 'on') {
-            autoViewOnceChats.add(msg.key.remoteJid);
-            await sock.sendMessage(msg.key.remoteJid, { text: '✅ Auto view-once enabled for this chat' });
+            const success = updateEnvFile('AUTO_VIEW_ONCE', 'true');
+            if (success) {
+                process.env.AUTO_VIEW_ONCE = 'true';
+                // Enable for all chats
+                autoViewOnceChats.add('global');
+                await sock.sendMessage(msg.key.remoteJid, { text: '✅ Auto view-once enabled globally\n\n💡 This setting is saved to .env and will persist after restart' });
+            } else {
+                await sock.sendMessage(msg.key.remoteJid, { text: '❌ Failed to update .env file' });
+            }
         } else if (arg === 'off') {
-            autoViewOnceChats.delete(msg.key.remoteJid);
-            await sock.sendMessage(msg.key.remoteJid, { text: '✅ Auto view-once disabled for this chat' });
+            const success = updateEnvFile('AUTO_VIEW_ONCE', 'false');
+            if (success) {
+                process.env.AUTO_VIEW_ONCE = 'false';
+                autoViewOnceChats.clear();
+                await sock.sendMessage(msg.key.remoteJid, { text: '✅ Auto view-once disabled globally\n\n💡 This setting is saved to .env' });
+            } else {
+                await sock.sendMessage(msg.key.remoteJid, { text: '❌ Failed to update .env file' });
+            }
         } else {
-            const enabled = autoViewOnceChats.has(msg.key.remoteJid);
-            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Auto view-once is ${enabled ? 'ON' : 'OFF'}
-
-Use ${config.prefix}autoviewonce on/off` });
+            const enabled = process.env.AUTO_VIEW_ONCE === 'true';
+            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Auto view-once is ${enabled ? 'ON' : 'OFF'} (Global)\n\nUse ${config.prefix}autoviewonce on/off\n\n💡 This is a global setting saved in .env` });
         }
     });
 
@@ -922,6 +946,69 @@ Use ${config.prefix}autoviewonce on/off` });
         }
     });
 
+    registerCommand('warn', 'Warn a user in the group', async (sock, msg, args) => {
+        if (!Permissions.isGroup(msg.key.remoteJid)) {
+            await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
+            return;
+        }
+        let targetJid = null;
+        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
+        } else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+        } else if (args[0]) {
+            const num = args[0].replace(/[^0-9]/g, '');
+            if (num) targetJid = `${num}@s.whatsapp.net`;
+        }
+        if (!targetJid) {
+            await sock.sendMessage(msg.key.remoteJid, { text: `❌ Specify a user to warn (reply or mention)` });
+            return;
+        }
+        const limit = warnLimits.get(msg.key.remoteJid) || 3;
+        const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
+        const c = (groupMap.get(targetJid) || 0) + 1;
+        groupMap.set(targetJid, c);
+        warnCounts.set(msg.key.remoteJid, groupMap);
+        if (c >= limit) {
+            try {
+                await sock.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'remove');
+                await sock.sendMessage(msg.key.remoteJid, { text: `⛔ Warn limit reached. Kicked @${targetJid.split('@')[0]}`, mentions: [targetJid] });
+            } catch (e) {
+                await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Failed to kick: ${e.message}` });
+            }
+        } else {
+            await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Warned @${targetJid.split('@')[0]} (${c}/${limit})`, mentions: [targetJid] });
+        }
+    });
+
+    registerCommand('resetwarn', 'Reset warnings for a user', async (sock, msg, args) => {
+        if (!Permissions.isGroup(msg.key.remoteJid)) {
+            await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
+            return;
+        }
+        let targetJid = null;
+        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
+        } else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+        } else if (args[0]) {
+            const num = args[0].replace(/[^0-9]/g, '');
+            if (num) targetJid = `${num}@s.whatsapp.net`;
+        }
+        if (!targetJid) {
+            await sock.sendMessage(msg.key.remoteJid, { text: `❌ Reply to a message or mention a user to reset their warnings` });
+            return;
+        }
+        const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
+        const prevCount = groupMap.get(targetJid) || 0;
+        groupMap.delete(targetJid);
+        warnCounts.set(msg.key.remoteJid, groupMap);
+        await sock.sendMessage(msg.key.remoteJid, {
+            text: `✅ Reset warnings for @${targetJid.split('@')[0]} (had ${prevCount} warnings)`,
+            mentions: [targetJid]
+        });
+    });
+
     registerCommand('ping', 'Check bot response time', async (sock, msg) => {
         const start = Date.now();
         const sentMsg = await sock.sendMessage(msg.key.remoteJid, {
@@ -968,6 +1055,47 @@ Use ${config.prefix}autoviewonce on/off` });
                   `• Mode: ${config.botMode.toUpperCase()}\n` +
                   `• Status: Active ✅`
         });
+    });
+
+    registerCommand('warnlimit', 'Set warn limit for this group', async (sock, msg, args) => {
+        if (!Permissions.isGroup(msg.key.remoteJid)) {
+            await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
+            return;
+        }
+        if (!args[0]) {
+            const current = warnLimits.get(msg.key.remoteJid) || 3;
+            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Current warn limit: ${current}\n\nUse ${config.prefix}warnlimit <number>` });
+            return;
+        }
+        const n = parseInt(args[0]);
+        if (isNaN(n) || n < 1) {
+            await sock.sendMessage(msg.key.remoteJid, { text: '❌ Provide a valid number (1 or more)' });
+            return;
+        }
+        warnLimits.set(msg.key.remoteJid, n);
+        await sock.sendMessage(msg.key.remoteJid, { text: `✅ Warn limit set to ${n}` });
+    });
+
+    registerCommand('antilink', 'Toggle anti-link for this chat', async (sock, msg, args) => {
+        if (!Permissions.isGroup(msg.key.remoteJid)) {
+            await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
+            return;
+        }
+        const sub = (args[0] || '').toLowerCase();
+        const actionArg = (args[1] || '').toLowerCase();
+        const current = antiLinkSettings.get(msg.key.remoteJid) || { enabled: false, action: 'warn' };
+        if (sub === 'on') {
+            current.enabled = true;
+            current.action = actionArg === 'kick' ? 'kick' : 'warn';
+            antiLinkSettings.set(msg.key.remoteJid, current);
+            await sock.sendMessage(msg.key.remoteJid, { text: `✅ Anti-link enabled (${current.action})` });
+        } else if (sub === 'off') {
+            current.enabled = false;
+            antiLinkSettings.set(msg.key.remoteJid, current);
+            await sock.sendMessage(msg.key.remoteJid, { text: '✅ Anti-link disabled' });
+        } else {
+            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Anti-link is ${current.enabled ? 'ON' : 'OFF'} (${current.action})\n\nUse ${config.prefix}antilink on [warn|kick] or ${config.prefix}antilink off` });
+        }
     });
 
     // Universal message text extractor (handles all WhatsApp message types)
@@ -1037,7 +1165,8 @@ Use ${config.prefix}autoviewonce on/off` });
             } catch {}
 
             const incomingVOMsg = unwrapViewOnce(msg.message);
-            if (!msg.key.fromMe && autoViewOnceChats.has(msg.key.remoteJid) && incomingVOMsg) {
+            const autoVOEnabled = process.env.AUTO_VIEW_ONCE === 'true' || autoViewOnceChats.has('global');
+            if (!msg.key.fromMe && autoVOEnabled && incomingVOMsg) {
                 try {
                     const buffer = await downloadMediaMessage({ message: incomingVOMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
                     if (incomingVOMsg.imageMessage) {
@@ -1046,6 +1175,41 @@ Use ${config.prefix}autoviewonce on/off` });
                         await sock.sendMessage(msg.key.remoteJid, { video: buffer, caption: 'Opened view-once 👀' });
                     }
                 } catch {}
+            }
+
+            const inGroup = Permissions.isGroup(msg.key.remoteJid);
+            const antiCfg = antiLinkSettings.get(msg.key.remoteJid) || { enabled: false, action: 'warn' };
+            if (inGroup && antiCfg.enabled && !msg.key.fromMe) {
+                const senderIsAdmin = await Permissions.isUserAdmin(sock, msg.key.remoteJid, msg.key.participant);
+                const isOwnerSender = Permissions.getSenderNumber(msg) === config.ownerNumber;
+                const hasLink = /((https?:\/\/)|(www\.))|chat\.whatsapp\.com\/[A-Za-z0-9]+/i.test(preText);
+                if (hasLink && !senderIsAdmin && !isOwnerSender) {
+                    try { await sock.sendMessage(msg.key.remoteJid, { delete: msg.key }); } catch {}
+                    if (antiCfg.action === 'kick') {
+                        try {
+                            await sock.groupParticipantsUpdate(msg.key.remoteJid, [msg.key.participant], 'remove');
+                            await sock.sendMessage(msg.key.remoteJid, { text: `⛔ Link detected. Kicked @${msg.key.participant.split('@')[0]}`, mentions: [msg.key.participant] });
+                        } catch (e) {
+                            await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Failed to kick: ${e.message}` });
+                        }
+                    } else {
+                        const limit = warnLimits.get(msg.key.remoteJid) || 3;
+                        const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
+                        const c = (groupMap.get(msg.key.participant) || 0) + 1;
+                        groupMap.set(msg.key.participant, c);
+                        warnCounts.set(msg.key.remoteJid, groupMap);
+                        if (c >= limit) {
+                            try {
+                                await sock.groupParticipantsUpdate(msg.key.remoteJid, [msg.key.participant], 'remove');
+                                await sock.sendMessage(msg.key.remoteJid, { text: `⛔ Warn limit reached. Kicked @${msg.key.participant.split('@')[0]}`, mentions: [msg.key.participant] });
+                            } catch (e) {
+                                await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Failed to kick: ${e.message}` });
+                            }
+                        } else {
+                            await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Link detected. Warned @${msg.key.participant.split('@')[0]} (${c}/${limit})`, mentions: [msg.key.participant] });
+                        }
+                    }
+                }
             }
 
             const messageText = preText;
@@ -1069,12 +1233,15 @@ Use ${config.prefix}autoviewonce on/off` });
             console.log('🔍 Command name:', commandName);
             console.log('🔍 Command exists?', commands.has(commandName));
 
-            // Get sender number
-            const senderNumber = msg.key.remoteJid.split('@')[0];
+            // Get sender number using permission system
+            const senderNumber = getSenderNumber(msg);
+            console.log('🔍 Sender number:', senderNumber);
+            console.log('🔍 Owner number:', config.ownerNumber);
 
             // Check bot mode and permissions
             const permission = await PermissionsObj.canRunCommand(sock, msg, commandName);
             if (!permission.allowed) {
+                console.log('❌ Permission denied:', permission.reason);
                 await sock.sendMessage(msg.key.remoteJid, { text: permission.reason });
                 return;
             }

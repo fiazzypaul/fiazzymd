@@ -1,12 +1,16 @@
 module.exports = (config) => {
-  const groupAdminCommands = new Set(['add', 'kick', 'promote', 'demote', 'mute', 'unmute', 'tag']);
-  const groupOnlyCommands = new Set(['add', 'kick', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall']);
-  const generalCommands = new Set(['menu', 'ping', 'help', 'session', 'tagall', 'vv']);
-  const varCommands = new Set(['autoviewonce']);
+  const groupAdminCommands = new Set(['add', 'kick', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn']);
+  const groupOnlyCommands = new Set(['add', 'kick', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn']);
+  const generalCommands = new Set(['menu', 'ping', 'help', 'session', 'vv']);
+  const varCommands = new Set(['autoviewonce']); // Commands that modify global .env settings
 
   const isGroup = (jid) => jid.endsWith('@g.us');
 
+  // Helper to normalize numbers to bare digits (removes country codes, suffixes, etc.)
+  const normalizeNumber = (num) => String(num).replace(/[^0-9]/g, '');
+
   const getSenderNumber = (msg) => {
+    // This part extracts the bare number (e.g., '2349133961422') or the internal ID (e.g., '280689517846702')
     const part = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
     return part;
   };
@@ -23,9 +27,16 @@ module.exports = (config) => {
 
   const canRunCommand = async (sock, msg, cmdName) => {
     const senderNumber = getSenderNumber(msg);
-    const isOwner = senderNumber === config.ownerNumber;
+    
+    // Check if the extracted sender number (either bare number or LID) 
+    // matches the *normalized* owner number.
+    const normalizedOwner = normalizeNumber(config.ownerNumber);
+    const isOwner = senderNumber.startsWith(normalizedOwner); // Use startsWith to handle LIDs
+
+    // Bot Owner Bypass
     if (isOwner) return { allowed: true };
 
+    // This block only runs if isOwner is false, restricting varCommands to everyone else.
     if (varCommands.has(cmdName)) {
       return { allowed: false, reason: '❌ Only the bot owner can use this command!' };
     }
