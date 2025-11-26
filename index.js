@@ -272,10 +272,21 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             // Reset reconnect attempts on successful connection
             reconnectAttempts = 0;
 
+            // Auto-detect and set owner number from bot's login
+            const botOwnNumber = sock.user.id.split(':')[0];
+            config.ownerNumber = botOwnNumber;
+
+            // Update .env with owner number if not set or different
+            if (process.env.OWNER_NUMBER !== botOwnNumber) {
+                updateEnvFile('OWNER_NUMBER', botOwnNumber);
+                process.env.OWNER_NUMBER = botOwnNumber;
+            }
+
             console.log('\n╔════════════════════════════════════╗');
             console.log('║   ✅ Connected Successfully!        ║');
             console.log('╚════════════════════════════════════╝\n');
             console.log('📞 Bot is ready to receive messages\n');
+            console.log(`🔑 Bot Owner: ${botOwnNumber}\n`);
             console.log('💡 Bot is active and ready to respond to commands!\n');
 
             // Send welcome message after 20 seconds
@@ -414,6 +425,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╭──────────────────────╮
 │  🧩 *VAR COMMANDS*     │
 ╰──────────────────────╯
+│ ${config.prefix}setvar
 │ ${config.prefix}autoviewonce
 │ ${config.prefix}warnlimit
 │ ${config.prefix}antilink
@@ -766,22 +778,32 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         if (x.ephemeralMessage) {
             console.log('🔍 unwrapViewOnce: Unwrapping ephemeralMessage');
             x = x.ephemeralMessage.message;
+            console.log('🔍 unwrapViewOnce: After ephemeral unwrap, keys:', Object.keys(x));
         }
 
-        // Check all view-once variants
-        if (x.viewOnceMessageV2 && x.viewOnceMessageV2.message) {
+        // Check all view-once variants (try V2 first as it's most common)
+        if (x.viewOnceMessageV2) {
             console.log('✅ unwrapViewOnce: Found viewOnceMessageV2');
-            return x.viewOnceMessageV2.message;
+            if (x.viewOnceMessageV2.message) {
+                console.log('🔍 Inner message keys:', Object.keys(x.viewOnceMessageV2.message));
+                return x.viewOnceMessageV2.message;
+            }
         }
 
-        if (x.viewOnceMessage && x.viewOnceMessage.message) {
-            console.log('✅ unwrapViewOnce: Found viewOnceMessage');
-            return x.viewOnceMessage.message;
+        if (x.viewOnceMessage) {
+            console.log('✅ unwrapViewOnce: Found viewOnceMessage (V1)');
+            if (x.viewOnceMessage.message) {
+                console.log('🔍 Inner message keys:', Object.keys(x.viewOnceMessage.message));
+                return x.viewOnceMessage.message;
+            }
         }
 
-        if (x.viewOnceMessageV2Extension && x.viewOnceMessageV2Extension.message) {
+        if (x.viewOnceMessageV2Extension) {
             console.log('✅ unwrapViewOnce: Found viewOnceMessageV2Extension');
-            return x.viewOnceMessageV2Extension.message;
+            if (x.viewOnceMessageV2Extension.message) {
+                console.log('🔍 Inner message keys:', Object.keys(x.viewOnceMessageV2Extension.message));
+                return x.viewOnceMessageV2Extension.message;
+            }
         }
 
         console.log('❌ unwrapViewOnce: No view-once message found');
@@ -811,20 +833,22 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             if (!c || !c.contextInfo) continue;
             const ctx = c.contextInfo;
 
-            // First try: direct quotedMessage
-            if (ctx.quotedMessage) {
-                console.log('✅ Found quoted message via contextInfo.quotedMessage');
-                return ctx.quotedMessage;
-            }
-
-            // Second try: stanzaId lookup in messageStore
+            // First try: stanzaId lookup in messageStore (most reliable for view-once)
             const stanzaId = ctx.stanzaId || ctx.stanzaIdV2 || ctx.quotedStanzaID;
             if (stanzaId) {
                 const loaded = messageStore.get(`${msg.key.remoteJid}:${stanzaId}`);
                 if (loaded) {
                     console.log('✅ Found quoted message via stanzaId:', stanzaId);
+                    console.log('🔍 Loaded message keys:', Object.keys(loaded));
                     return loaded;
                 }
+            }
+
+            // Second try: direct quotedMessage (may be unwrapped for view-once)
+            if (ctx.quotedMessage) {
+                console.log('✅ Found quoted message via contextInfo.quotedMessage');
+                console.log('🔍 Quoted message keys:', Object.keys(ctx.quotedMessage));
+                return ctx.quotedMessage;
             }
         }
 
@@ -837,6 +861,19 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         console.log('Message keys:', Object.keys(msg));
         console.log('Message.message keys:', msg.message ? Object.keys(msg.message) : 'none');
 
+        // Get contextInfo to check if quoted message was view-once
+        let contextInfo = null;
+        const m = msg.message;
+        if (m.extendedTextMessage?.contextInfo) {
+            contextInfo = m.extendedTextMessage.contextInfo;
+        }
+
+        console.log('🔍 ContextInfo:', contextInfo ? 'Found' : 'Not found');
+        if (contextInfo) {
+            console.log('🔍 ContextInfo keys:', Object.keys(contextInfo));
+            console.log('🔍 Quoted message type:', contextInfo.quotedMessage ? Object.keys(contextInfo.quotedMessage)[0] : 'none');
+        }
+
         const quotedMsg = getQuotedMessage(msg);
         console.log('Quoted message:', quotedMsg ? 'Found' : 'Not found');
 
@@ -847,17 +884,45 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             return;
         }
 
+        console.log('🔍 Quoted message keys:', Object.keys(quotedMsg));
+
         // Check if it's actually a view-once message
-        const hasViewOnce = quotedMsg.viewOnceMessage || quotedMsg.viewOnceMessageV2 || quotedMsg.viewOnceMessageV2Extension;
+        // Method 1: Check for view-once wrapper
+        let checkMsg = quotedMsg;
+        if (checkMsg.ephemeralMessage) {
+            console.log('🔍 Found ephemeral wrapper in quoted message');
+            checkMsg = checkMsg.ephemeralMessage.message;
+            console.log('🔍 After unwrapping ephemeral, keys:', Object.keys(checkMsg));
+        }
+
+        let hasViewOnce = checkMsg.viewOnceMessage || checkMsg.viewOnceMessageV2 || checkMsg.viewOnceMessageV2Extension;
+
+        // Method 2: Check contextInfo for view-once indicator (newer WhatsApp versions)
+        if (!hasViewOnce && contextInfo) {
+            // If contextInfo has isViewOnce flag or quotedMessage came from view-once
+            hasViewOnce = contextInfo.isViewOnce === true ||
+                         contextInfo.isViewOnce === 1 ||
+                         (contextInfo.quotedMessage && (quotedMsg.imageMessage || quotedMsg.videoMessage));
+        }
+
+        console.log('🔍 Has view-once?', !!hasViewOnce);
+
         if (!hasViewOnce) {
             await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ That's not a view-once message!\n\n💡 The message you replied to is a regular ${Object.keys(quotedMsg)[0] || 'message'}`
+                text: `❌ That's not a view-once message!\n\n💡 The message you replied to is a regular ${Object.keys(checkMsg)[0] || 'message'}`
             });
             return;
         }
 
-        const inner = unwrapViewOnce(quotedMsg);
+        // Try to unwrap view-once, if it fails, use quotedMsg directly (already unwrapped)
+        let inner = unwrapViewOnce(quotedMsg);
         console.log('View-once unwrapped:', inner ? 'Yes' : 'No');
+
+        // If unwrapping failed, quotedMsg might already be the inner content
+        if (!inner && (quotedMsg.imageMessage || quotedMsg.videoMessage)) {
+            console.log('🔍 Using quotedMsg directly (already unwrapped)');
+            inner = quotedMsg;
+        }
 
         if (!inner) {
             await sock.sendMessage(msg.key.remoteJid, {
@@ -910,6 +975,120 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         } else {
             const enabled = process.env.AUTO_VIEW_ONCE === 'true';
             await sock.sendMessage(msg.key.remoteJid, { text: `📊 Auto view-once is ${enabled ? 'ON' : 'OFF'} (Global)\n\nUse ${config.prefix}autoviewonce on/off\n\n💡 This is a global setting saved in .env` });
+        }
+    });
+
+    registerCommand('setvar', 'Set environment variable in .env file', async (sock, msg, args) => {
+        if (args.length < 2) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `📖 *How to use ${config.prefix}setvar*\n\n` +
+                      `*Description:* Set or update environment variables\n\n` +
+                      `*Usage:* ${config.prefix}setvar <KEY> <VALUE>\n\n` +
+                      `*Common Variables:*\n` +
+                      `• BOT_MODE - Set bot mode (public/private)\n` +
+                      `• PREFIX - Set command prefix\n` +
+                      `• OWNER_NUMBER - Set owner number\n` +
+                      `• BOT_NAME - Set bot name\n` +
+                      `• AUTO_VIEW_ONCE - Auto view-once (true/false)\n\n` +
+                      `*Examples:*\n` +
+                      `${config.prefix}setvar BOT_MODE private\n` +
+                      `${config.prefix}setvar BOT_MODE public\n` +
+                      `${config.prefix}setvar PREFIX .\n` +
+                      `${config.prefix}setvar PREFIX !\n` +
+                      `${config.prefix}setvar OWNER_NUMBER 2349012345678\n` +
+                      `${config.prefix}setvar BOT_NAME MyBot\n\n` +
+                      `⚠️ *Important:* Some changes require bot restart to take effect!`
+            });
+            return;
+        }
+
+        const key = args[0].toUpperCase();
+        const value = args.slice(1).join(' ');
+
+        // Validate common variables
+        if (key === 'BOT_MODE' && !['public', 'private'].includes(value.toLowerCase())) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Invalid BOT_MODE value!\n\n` +
+                      `Valid values: public, private\n\n` +
+                      `Example: ${config.prefix}setvar BOT_MODE public`
+            });
+            return;
+        }
+
+        if (key === 'AUTO_VIEW_ONCE' && !['true', 'false'].includes(value.toLowerCase())) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Invalid AUTO_VIEW_ONCE value!\n\n` +
+                      `Valid values: true, false\n\n` +
+                      `Example: ${config.prefix}setvar AUTO_VIEW_ONCE true`
+            });
+            return;
+        }
+
+        // Update .env file
+        const success = updateEnvFile(key, value);
+
+        if (success) {
+            // Update runtime config for immediate effect (where applicable)
+            process.env[key] = value;
+
+            if (key === 'BOT_MODE') {
+                config.botMode = value.toLowerCase();
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Variable Updated Successfully!*\n\n` +
+                          `• Key: ${key}\n` +
+                          `• Value: ${value}\n\n` +
+                          `📝 Bot mode changed to: *${value.toUpperCase()}*\n\n` +
+                          `💡 Change is active immediately!`
+                });
+            } else if (key === 'PREFIX') {
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Variable Updated Successfully!*\n\n` +
+                          `• Key: ${key}\n` +
+                          `• Value: ${value}\n\n` +
+                          `⚠️ *Restart Required:* Please restart the bot for prefix change to take effect`
+                });
+            } else if (key === 'OWNER_NUMBER') {
+                config.ownerNumber = value;
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Variable Updated Successfully!*\n\n` +
+                          `• Key: ${key}\n` +
+                          `• Value: ${value}\n\n` +
+                          `⚠️ *Restart Required:* Please restart the bot for owner number change to take effect`
+                });
+            } else if (key === 'BOT_NAME') {
+                config.botName = value;
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Variable Updated Successfully!*\n\n` +
+                          `• Key: ${key}\n` +
+                          `• Value: ${value}\n\n` +
+                          `💡 Bot name changed to: *${value}*`
+                });
+            } else if (key === 'AUTO_VIEW_ONCE') {
+                if (value.toLowerCase() === 'true') {
+                    autoViewOnceChats.add('global');
+                } else {
+                    autoViewOnceChats.clear();
+                }
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Variable Updated Successfully!*\n\n` +
+                          `• Key: ${key}\n` +
+                          `• Value: ${value}\n\n` +
+                          `💡 Auto view-once is now: *${value.toLowerCase() === 'true' ? 'ON' : 'OFF'}*`
+                });
+            } else {
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Variable Updated Successfully!*\n\n` +
+                          `• Key: ${key}\n` +
+                          `• Value: ${value}\n\n` +
+                          `💡 Saved to .env file\n` +
+                          `⚠️ Some changes may require bot restart`
+                });
+            }
+        } else {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to update .env file!\n\n` +
+                      `Please check file permissions and try again.`
+            });
         }
     });
 
@@ -1254,6 +1433,7 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             if (msg.key.fromMe && !preText.startsWith(config.prefix)) return;
 
             console.log('📩 New message from:', msg.key.remoteJid);
+            console.log('📋 Message type keys:', Object.keys(msg.message));
 
             try {
                 const id = msg.key.id || '';
@@ -1261,17 +1441,28 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
                 if (!messageStore.has(k)) messageStore.set(k, msg.message);
             } catch {}
 
+            // Auto view-once handler - works for all incoming view-once messages
+            console.log('🔍 Checking for view-once message...');
             const incomingVOMsg = unwrapViewOnce(msg.message);
             const autoVOEnabled = process.env.AUTO_VIEW_ONCE === 'true' || autoViewOnceChats.has('global');
-            if (!msg.key.fromMe && autoVOEnabled && incomingVOMsg) {
+            console.log('🔍 Auto view-once enabled:', autoVOEnabled);
+            console.log('🔍 View-once message found:', !!incomingVOMsg);
+
+            if (autoVOEnabled && incomingVOMsg) {
                 try {
+                    console.log('🔍 Auto view-once: Detected view-once message');
                     const buffer = await downloadMediaMessage({ message: incomingVOMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
                     if (incomingVOMsg.imageMessage) {
-                        await sock.sendMessage(msg.key.remoteJid, { image: buffer, caption: 'Opened view-once 👀' });
+                        console.log('📤 Auto view-once: Sending image...');
+                        await sock.sendMessage(msg.key.remoteJid, { image: buffer, caption: '👀 Auto-opened view-once image' });
                     } else if (incomingVOMsg.videoMessage) {
-                        await sock.sendMessage(msg.key.remoteJid, { video: buffer, caption: 'Opened view-once 👀' });
+                        console.log('📤 Auto view-once: Sending video...');
+                        await sock.sendMessage(msg.key.remoteJid, { video: buffer, caption: '👀 Auto-opened view-once video' });
                     }
-                } catch {}
+                    console.log('✅ Auto view-once: Successfully processed');
+                } catch (error) {
+                    console.error('❌ Auto view-once error:', error.message);
+                }
             }
 
             const inGroup = Permissions.isGroup(msg.key.remoteJid);
