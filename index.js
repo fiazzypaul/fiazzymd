@@ -545,11 +545,130 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         }
 
         try {
-            await sock.groupParticipantsUpdate(msg.key.remoteJid, [`${number}@s.whatsapp.net`], 'add');
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `✅ Successfully added +${number} to the group!`
-            });
+            const userJid = `${number}@s.whatsapp.net`;
+            const result = await sock.groupParticipantsUpdate(msg.key.remoteJid, [userJid], 'add');
+            console.log('📊 Add result:', JSON.stringify(result, null, 2));
+
+            // Check if result exists and is valid
+            if (!result || result.length === 0) {
+                console.error('❌ Invalid result from groupParticipantsUpdate');
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `❌ Failed to add +${number}: No response from WhatsApp`
+                });
+                return;
+            }
+
+            // Check if the add was successful
+            // Result format: [{ status: 200 }] for success
+            // or [{ status: 403 }] for privacy blocked
+            const userResult = result[0];
+            const statusCode = parseInt(userResult.status) || userResult.status;
+
+            console.log('📊 Status code:', statusCode, 'Type:', typeof statusCode);
+
+            if (statusCode === 200 || statusCode === '200') {
+                // Successfully added
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ Successfully added @${number.split('@')[0]} to the group!`,
+                    mentions: [userJid]
+                });
+            } else if (statusCode === 403 || statusCode === '403') {
+                // User privacy blocked - send invite link
+                console.log('⚠️  User privacy blocked. Attempting to generate invite link...');
+
+                try {
+                    // Check if bot owner/user is admin (required to generate invite links)
+                    // Note: WhatsApp bots can't be admins - the owner's account that's logged in is what matters
+                    const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
+
+                    // Get the bot owner's number (the account running the bot)
+                    const botOwnerNumber = sock.user.id.split(':')[0];
+
+                    console.log('🔍 Bot owner number:', botOwnerNumber);
+                    console.log('📋 Group participants:', groupMetadata.participants.map(p => ({
+                        id: p.id,
+                        admin: p.admin
+                    })));
+
+                    // Check if ANY admin exists in the group
+                    const hasAdmins = groupMetadata.participants.some(p => p.admin === 'admin' || p.admin === 'superadmin');
+
+                    if (!hasAdmins) {
+                        await sock.sendMessage(msg.key.remoteJid, {
+                            text: `⚠️ Could not add @${number} due to privacy settings.\n\n` +
+                                  `❌ Cannot send invite: No admins found in group.`,
+                            mentions: [userJid]
+                        });
+                        return;
+                    }
+
+                    // Try to generate invite code (will succeed if the bot owner's account has permission)
+                    console.log('⚡ Attempting to generate invite code...');
+                    const inviteCode = await sock.groupInviteCode(msg.key.remoteJid);
+                    const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
+                    console.log('✅ Generated invite link:', inviteLink);
+
+                    // Get group metadata for the invite card
+                    const groupName = groupMetadata.subject;
+                    const inviteExpiration = Math.floor(Date.now() / 1000) + (3 * 24 * 60 * 60); // 3 days from now
+
+                    // Try to get group icon
+                    let groupIconBuffer = null;
+                    try {
+                        const groupIconUrl = await sock.profilePictureUrl(msg.key.remoteJid, 'image');
+                        if (groupIconUrl) {
+                            const response = await fetch(groupIconUrl);
+                            groupIconBuffer = await response.buffer();
+                        }
+                    } catch (iconError) {
+                        console.log('⚠️  Could not fetch group icon:', iconError.message);
+                    }
+
+                    // Build the group invite message
+                    const inviteMessage = {
+                        jid: msg.key.remoteJid,           // Group JID
+                        name: groupName,                   // Group name
+                        caption: 'Invitation to join my WhatsApp group',
+                        code: inviteCode,                  // Invite code
+                        expiration: inviteExpiration       // Expiration timestamp
+                    };
+
+                    // Only add thumbnail if we have one
+                    if (groupIconBuffer) {
+                        inviteMessage.jpegThumbnail = groupIconBuffer;
+                    }
+
+                    // Send official WhatsApp group invite card
+                    await sock.sendMessage(userJid, {
+                        groupInvite: inviteMessage
+                    });
+
+                    console.log('✅ Sent official group invite card to user');
+
+                    // Notify in group with mention
+                    await sock.sendMessage(msg.key.remoteJid, {
+                        text: `⚠️ Could not add @${number} due to privacy settings.\n` +
+                              `📨 An official group invite has been sent to the user.`,
+                        mentions: [userJid]
+                    });
+                } catch (inviteError) {
+                    console.error('❌ Failed to generate/send invite:', inviteError);
+                    await sock.sendMessage(msg.key.remoteJid, {
+                        text: `⚠️ Could not add @${number} due to privacy settings.\n\n` +
+                              `❌ Failed to send invite: ${inviteError.message}\n` +
+                              `💡 Make sure bot is a group admin to generate invite links.`,
+                        mentions: [userJid]
+                    });
+                }
+            } else {
+                // Other error status
+                console.log('⚠️  Unexpected status:', statusCode);
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `❌ Failed to add +${number} (Error code: ${statusCode})`
+                });
+            }
         } catch (error) {
+            console.error('❌ Error in add command:', error);
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `❌ Failed to add member: ${error.message}`
             });
