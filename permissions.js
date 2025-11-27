@@ -1,6 +1,6 @@
 module.exports = (config) => {
-  const groupAdminCommands = new Set(['add', 'kick', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn', 'welcome']);
-  const groupOnlyCommands = new Set(['add', 'kick', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn', 'welcome']);
+  const groupAdminCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn', 'welcome']);
+  const groupOnlyCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn', 'welcome']);
   const generalCommands = new Set(['menu', 'ping', 'help', 'session', 'vv', 'del', 'sticker']);
   const varCommands = new Set(['autoviewonce', 'setvar', 'mode', 'prefix', 'ownernumber', 'seevar', 'antidelete']); // Commands that modify global .env settings
 

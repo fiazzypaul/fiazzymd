@@ -616,6 +616,68 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         }
     });
 
+    registerCommand('kickall', 'Remove all members from the group', async (sock, msg) => {
+        if (!isGroup(msg.key.remoteJid)) {
+            return await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ This command is only for groups!'
+            });
+        }
+
+        // Get sender number
+        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
+        const isOwner = senderNumber === config.ownerNumber;
+
+        // Check if user is admin (owner can bypass in any mode)
+        if (!isOwner) {
+            if (config.botMode === 'private') {
+                return await sock.sendMessage(msg.key.remoteJid, {
+                    text: '❌ This command is restricted to bot owner in private mode!'
+                });
+            }
+
+            if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant))) {
+                return await sock.sendMessage(msg.key.remoteJid, {
+                    text: '❌ Only admins can use this command!'
+                });
+            }
+        }
+
+        try {
+            // Get group metadata
+            const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
+            const participants = groupMetadata.participants;
+
+            // Get bot's JID
+            const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
+
+            // Filter out admins and the bot itself
+            const membersToKick = participants
+                .filter(p => !p.admin && p.id !== botJid)
+                .map(p => p.id);
+
+            if (membersToKick.length === 0) {
+                return await sock.sendMessage(msg.key.remoteJid, {
+                    text: '❌ No members to remove! (Only non-admin members can be removed)'
+                });
+            }
+
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `⏳ Removing ${membersToKick.length} members from the group...`
+            });
+
+            // Remove all members
+            await sock.groupParticipantsUpdate(msg.key.remoteJid, membersToKick, 'remove');
+
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `✅ Successfully removed ${membersToKick.length} members from the group!`
+            });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to remove members: ${error.message}`
+            });
+        }
+    });
+
     registerCommand('promote', 'Promote a member to admin', async (sock, msg, args) => {
         if (!isGroup(msg.key.remoteJid)) {
             return await sock.sendMessage(msg.key.remoteJid, {
