@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 /**
  * Search for anime using Jikan API (MyAnimeList wrapper)
@@ -11,12 +11,14 @@ async function searchAnime(query, limit = 5) {
   try {
     // Jikan API v4 - Free, no auth required
     const url = `https://api.jikan.moe/v4/anime?q=${encodeURIComponent(query)}&limit=${limit}`;
-    const response = await fetch(url);
-
+    let response = await fetch(url);
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise(r => setTimeout(r, 750));
+      response = await fetch(url);
+    }
     if (!response.ok) {
       throw new Error(`Jikan API error: ${response.status}`);
     }
-
     const data = await response.json();
     const results = data.data || [];
 
@@ -47,12 +49,14 @@ async function searchAnime(query, limit = 5) {
 async function getTopAnime(limit = 5) {
   try {
     const url = `https://api.jikan.moe/v4/top/anime?limit=${limit}`;
-    const response = await fetch(url);
-
+    let response = await fetch(url);
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise(r => setTimeout(r, 750));
+      response = await fetch(url);
+    }
     if (!response.ok) {
       throw new Error(`Jikan API error: ${response.status}`);
     }
-
     const data = await response.json();
     const results = data.data || [];
 
@@ -84,12 +88,14 @@ async function getSeasonalAnime(limit = 5) {
   try {
     // Get current season anime
     const url = `https://api.jikan.moe/v4/seasons/now?limit=${limit}`;
-    const response = await fetch(url);
-
+    let response = await fetch(url);
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise(r => setTimeout(r, 750));
+      response = await fetch(url);
+    }
     if (!response.ok) {
       throw new Error(`Jikan API error: ${response.status}`);
     }
-
     const data = await response.json();
     const results = data.data || [];
 
@@ -119,12 +125,14 @@ async function getSeasonalAnime(limit = 5) {
 async function getRandomAnime() {
   try {
     const url = `https://api.jikan.moe/v4/random/anime`;
-    const response = await fetch(url);
-
+    let response = await fetch(url);
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise(r => setTimeout(r, 750));
+      response = await fetch(url);
+    }
     if (!response.ok) {
       throw new Error(`Jikan API error: ${response.status}`);
     }
-
     const data = await response.json();
     const anime = data.data;
 
@@ -166,7 +174,7 @@ function formatAnimeResults(animes, prefix) {
     text += `   📝 ${anime.synopsis.substring(0, 100)}${anime.synopsis.length > 100 ? '...' : ''}\n\n`;
   });
 
-  text += `💡 Powered by MyAnimeList (Jikan API)`;
+  text += `💡 Powered by Fiazzy-MD`;
 
   return text;
 }
@@ -183,7 +191,7 @@ function formatAnimeDetails(anime) {
   text += `📡 *Status:* ${anime.status}\n`;
   text += `🎭 *Genres:* ${anime.genres}\n\n`;
   text += `📝 *Synopsis:*\n${anime.synopsis}\n\n`;
-  text += `💡 Powered by MyAnimeList (Jikan API)`;
+  text += `💡 Powered by Fiazzy-MD`;
 
   return text;
 }

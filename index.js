@@ -451,7 +451,9 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │  🎬 *ENTERTAINMENT*    │
 ╰──────────────────────╯
 │ ${config.prefix}movie - Movie recommendations
+│    • ${config.prefix}movie trending | random | <query>
 │ ${config.prefix}anime - Anime recommendations
+│    • ${config.prefix}anime top | seasonal | random | <query>
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1890,6 +1892,16 @@ ${config.prefix}setvar <key> <value>
         } else {
             const primary = args[0].toLowerCase();
             const secondary = (args[1] || '').toLowerCase();
+            if (primary === 'movie') {
+                const text = `📖 *${config.prefix}movie*\n\n*Usage:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie <query>\n\n*Examples:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie inception`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'anime') {
+                const text = `📖 *${config.prefix}anime*\n\n*Usage:*\n- ${config.prefix}anime top\n- ${config.prefix}anime seasonal\n- ${config.prefix}anime random\n- ${config.prefix}anime <query>\n\n*Examples:*\n- ${config.prefix}anime top\n- ${config.prefix}anime seasonal\n- ${config.prefix}anime random\n- ${config.prefix}anime naruto`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'welcome' && secondary === 'set') {
                 const text = `📖 *${config.prefix}welcome set*\n\nSets a custom welcome message for this group.\n\nPlaceholders:\n- @user → mentions the new member (required)\n- {group} → replaced with the group name (optional)\n\nExamples:\n- ${config.prefix}welcome set Welcome to {group}, @user 👋\n- ${config.prefix}welcome set Hello @user — read the rules in the description`;
                 await sock.sendMessage(msg.key.remoteJid, { text });

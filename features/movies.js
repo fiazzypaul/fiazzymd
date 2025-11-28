@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 
 /**
  * Search for movies using The Movie Database (TMDb) API
@@ -17,12 +17,14 @@ async function searchMovies(query, limit = 5) {
     }
 
     const url = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(query)}&page=1`;
-    const response = await fetch(url);
-
+    let response = await fetch(url);
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise(r => setTimeout(r, 750));
+      response = await fetch(url);
+    }
     if (!response.ok) {
       throw new Error(`TMDb API error: ${response.status}`);
     }
-
     const data = await response.json();
     const results = data.results.slice(0, limit);
 
@@ -55,12 +57,14 @@ async function getTrendingMovies(limit = 5) {
     }
 
     const url = `https://api.themoviedb.org/3/trending/movie/week?api_key=${apiKey}`;
-    const response = await fetch(url);
-
+    let response = await fetch(url);
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise(r => setTimeout(r, 750));
+      response = await fetch(url);
+    }
     if (!response.ok) {
       throw new Error(`TMDb API error: ${response.status}`);
     }
-
     const data = await response.json();
     const results = data.results.slice(0, limit);
 
@@ -93,12 +97,14 @@ async function getRandomMovie() {
 
     const randomPage = Math.floor(Math.random() * 5) + 1; // Random page 1-5
     const url = `https://api.themoviedb.org/3/movie/popular?api_key=${apiKey}&page=${randomPage}`;
-    const response = await fetch(url);
-
+    let response = await fetch(url);
+    if (!response.ok && (response.status === 429 || response.status >= 500)) {
+      await new Promise(r => setTimeout(r, 750));
+      response = await fetch(url);
+    }
     if (!response.ok) {
       throw new Error(`TMDb API error: ${response.status}`);
     }
-
     const data = await response.json();
     const randomIndex = Math.floor(Math.random() * data.results.length);
     const movie = data.results[randomIndex];
@@ -136,7 +142,7 @@ function formatMovieResults(movies, prefix) {
     text += `   📝 ${movie.overview.substring(0, 100)}${movie.overview.length > 100 ? '...' : ''}\n\n`;
   });
 
-  text += `💡 Powered by TMDb`;
+  text += `💡 Powered by Fiazzy-MD`;
 
   return text;
 }
@@ -150,7 +156,7 @@ function formatMovieDetails(movie) {
   let text = `🎬 *${movie.title}* (${movie.year})\n\n`;
   text += `⭐ *Rating:* ${movie.rating}/10\n\n`;
   text += `📝 *Overview:*\n${movie.overview}\n\n`;
-  text += `💡 Powered by TMDb`;
+  text += `💡 Powered by Fiazzy-MD`;
 
   return text;
 }
