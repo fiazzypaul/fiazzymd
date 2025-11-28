@@ -449,6 +449,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}welcome (owner/admin only)
 │ ${config.prefix}gemini
 │ ${config.prefix}alive
+│ ${config.prefix}wapresence (owner only)
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -2744,9 +2745,11 @@ showMenu().catch(err => {
             try { for (const u of updates) if (u.id) presenceTargets.add(u.id); } catch {}
         });
     } catch {}
+    let presenceInterval = null;
     function startPresenceLoop(sockInstance) {
         const activeStates = new Set(['composing', 'recording', 'available']);
-        setInterval(async () => {
+        if (presenceInterval) { try { clearInterval(presenceInterval); } catch {} }
+        presenceInterval = setInterval(async () => {
             const currentState = (process.env.WAPRESENCE_STATE || 'paused').toLowerCase();
             if (!activeStates.has(currentState)) return;
             try {
@@ -2757,7 +2760,7 @@ showMenu().catch(err => {
                     await sockInstance.sendPresenceUpdate(currentState, jid);
                 }
             } catch (e) {}
-        }, 25000);
+        }, 20000);
     }
     registerCommand('alive', 'Show or set alive message for this chat', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
