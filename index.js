@@ -8,6 +8,7 @@ const path = require('path');
 const { createStickerBuffer } = require('./features/sticker');
 const { enableWelcome, disableWelcome, isWelcomeEnabled, sendWelcomeMessage, sendGoodbyeMessage } = require('./features/welcome');
 const gemini = require('./features/gemini');
+const imagesCF = require('./features/images_cf');
 const createPermissions = require('./permissions');
 const { searchSongs, downloadSong, formatSearchResults } = require('./features/songs');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
@@ -1370,7 +1371,13 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             'VIEWONCE': 'AUTO_VIEW_ONCE',
             'GEMINI': 'GEMINI_API_KEY',
             'PRESENCE': 'WAPRESENCE_STATE',
-            'WAPRESENCE': 'WAPRESENCE_STATE'
+            'WAPRESENCE': 'WAPRESENCE_STATE',
+            'OPENAI': 'OPENAI_API_KEY',
+            'CHATGPT': 'OPENAI_API_KEY',
+            'GPT': 'OPENAI_API_KEY',
+            'CLOUDFLARE_ACCOUNT': 'CF_ACCOUNT_ID',
+            'CF_ACCOUNT': 'CF_ACCOUNT_ID',
+            'CF_MODEL': 'CF_IMAGE_MODEL'
         };
 
         // Use alias mapping if exists
@@ -1962,7 +1969,7 @@ ${config.prefix}setvar <key> <value>
                 return;
             }
             if (primary === 'img') {
-                const text = `📖 *${config.prefix}img <prompt>*\n\n*AI Image Generation* ⚠️ _Currently Unavailable_\n\n*Status:* This feature is temporarily disabled.\n\n*Reason:*\nImage generation requires Google Cloud Vertex AI access, which is not available with standard Gemini API keys from AI Studio.\n\n*Alternative Solutions:*\n1. Configure Vertex AI (requires Google Cloud project + billing)\n2. Integrate alternative APIs (DALL-E, Stable Diffusion)\n3. Use web-based image generation services\n\n*What was planned:*\n• Generate 2 AI images per request\n• Various styles and formats\n• Natural language descriptions\n\n*Contact:* Ask the bot owner to configure Vertex AI or an alternative image generation service.`;
+                const text = `📖 *${config.prefix}img <prompt>*\n\nGenerate an image using Cloudflare Workers AI (Stable Diffusion).\n\n*Setup (owner):*\n- ${config.prefix}setvar CF_ACCOUNT_ID <ID>\n- ${config.prefix}setvar CF_API_TOKEN <TOKEN>\n- Optional: ${config.prefix}setvar CF_IMAGE_MODEL @cf/stabilityai/stable-diffusion-xl-base-1.0\n\n*Docs:* https://developers.cloudflare.com/workers-ai/\n\n*Example:*\n- ${config.prefix}img a futuristic city skyline at night`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
@@ -2025,76 +2032,29 @@ ${config.prefix}setvar <key> <value>
         await sock.sendMessage(msg.key.remoteJid, { text });
     });
 
-    registerCommand('img', 'Generate images from text using Gemini AI (2 images per prompt)', async (sock, msg, args) => {
+    registerCommand('img', 'Generate image from text using Cloudflare Workers AI', async (sock, msg, args) => {
         const prompt = args.join(' ').trim();
         const jid = msg.key.remoteJid;
-
-        if (!prompt) {
-            await sock.sendMessage(jid, {
-                text: `💡 *Image Generation*\n\n` +
-                      `Please provide a detailed prompt for the image.\n\n` +
-                      `*Example:*\n` +
-                      `${config.prefix}img a realistic photograph of a cyborg cat reading a book in a library\n\n` +
-                      `*Tips:*\n` +
-                      `• Be specific and descriptive\n` +
-                      `• Mention style, colors, mood\n` +
-                      `• Generates 2 images per request`
-            });
-            return;
-        }
-
-        // Check if API key is configured
-        if (!process.env.GEMINI_API_KEY) {
-            await sock.sendMessage(jid, {
-                text: `❌ *Image generation is not available*\n\n` +
-                      `The bot owner has not configured the Gemini API key.\n` +
-                      `Please contact the bot owner to enable this feature.`
-            });
-            return;
-        }
-
-        // Send "generating" message
-        await sock.sendMessage(jid, {
-            text: `🎨 *Generating images...*\n\n` +
-                  `Prompt: "${prompt}"\n\n` +
-                  `Please wait, this may take 10-30 seconds...`
-        });
-
-        // Show typing indicator
-        await sock.sendPresenceUpdate('composing', jid);
-
-        // Generate images
-        const result = await gemini.generateImage(prompt, 2);
-
-        // Stop typing indicator
-        await sock.sendPresenceUpdate('paused', jid);
-
-        if (result.success && result.images) {
-            // Send all generated images
-            for (let i = 0; i < result.images.length; i++) {
-                const imageBuffer = result.images[i];
-                const caption = i === 0
-                    ? `🖼️ *Image ${i + 1}/${result.images.length}*\n\nPrompt: "${prompt}"`
-                    : `🖼️ *Image ${i + 1}/${result.images.length}*`;
-
-                await sock.sendMessage(jid, {
-                    image: imageBuffer,
-                    caption: caption
-                });
-
-                // Small delay between sending multiple images
-                if (i < result.images.length - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                }
+        if (!prompt) { await sock.sendMessage(jid, { text: `💡 Usage: ${config.prefix}img <prompt>\nExample: ${config.prefix}img a futuristic city skyline at night` }); return; }
+        if (!process.env.CF_ACCOUNT_ID && !process.env.CLOUDFLARE_ACCOUNT) { await sock.sendMessage(jid, { text: `❌ Cloudflare account not set. Use ${config.prefix}setvar CF_ACCOUNT_ID <ID>` }); return; }
+        if (!process.env.CF_API_TOKEN) { await sock.sendMessage(jid, { text: `❌ Cloudflare API token not set. Use ${config.prefix}setvar CF_API_TOKEN <TOKEN>\nDocs: https://developers.cloudflare.com/workers-ai/` }); return; }
+        await sock.sendMessage(jid, { text: `🎨 *Generating images...*\n\nPrompt: "${prompt}"\n\nPlease wait, this may take 10-30 seconds...` });
+        try { await sock.sendPresenceUpdate('composing', jid); } catch {}
+        const res = await imagesCF.generateImages(prompt, 2, {});
+        try { await sock.sendPresenceUpdate('paused', jid); } catch {}
+        if (res.success && res.images && res.images.length) {
+            for (let i = 0; i < res.images.length; i++) {
+                const caption = i === 0 ? `🖼️ *Image ${i + 1}/${res.images.length}*\n\nPrompt: "${prompt}"` : `🖼️ *Image ${i + 1}/${res.images.length}*`;
+                await sock.sendMessage(jid, { image: res.images[i], caption });
+                if (i < res.images.length - 1) { await new Promise(r => setTimeout(r, 500)); }
             }
-
-            console.log(`✅ Generated ${result.images.length} images for prompt: "${prompt}"`);
         } else {
-            // Send error message
-            await sock.sendMessage(jid, {
-                text: result.error || '⚠️ Failed to generate images. Please try again later.'
-            });
-            console.error('❌ Image generation failed:', result.error);
+            const err = String(res.error || 'Generation failed');
+            if (err.includes('401')) {
+                await sock.sendMessage(jid, { text: `❌ Authentication error. Verify CF_ACCOUNT_ID and CF_API_TOKEN (Workers AI Read).` });
+            } else {
+                await sock.sendMessage(jid, { text: `❌ ${err}` });
+            }
         }
     });
 
@@ -2222,7 +2182,7 @@ ${config.prefix}setvar <key> <value>
         const current = antiLinkSettings.get(msg.key.remoteJid) || { enabled: false, action: 'warn' };
         if (sub === 'on') {
             current.enabled = true;
-            current.action = actionArg === 'kick' ? 'kick' : actionArg === 'delete' ? 'delete' : 'warn';
+            current.action = actionArg === 'kick' ? 'kick' : 'warn';
             antiLinkSettings.set(msg.key.remoteJid, current);
             await sock.sendMessage(msg.key.remoteJid, { text: `✅ Anti-link enabled (${current.action})` });
         } else if (sub === 'off') {
@@ -2230,7 +2190,7 @@ ${config.prefix}setvar <key> <value>
             antiLinkSettings.set(msg.key.remoteJid, current);
             await sock.sendMessage(msg.key.remoteJid, { text: '✅ Anti-link disabled' });
         } else {
-            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Anti-link is ${current.enabled ? 'ON' : 'OFF'} (${current.action})\n\nUse ${config.prefix}antilink on [warn|kick|delete] or ${config.prefix}antilink off` });
+            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Anti-link is ${current.enabled ? 'ON' : 'OFF'} (${current.action})\n\nUse ${config.prefix}antilink on [warn|kick] or ${config.prefix}antilink off` });
         }
     });
 
@@ -2402,8 +2362,6 @@ ${config.prefix}setvar <key> <value>
                         } catch (e) {
                             await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Failed to kick: ${e.message}` });
                         }
-                    } else if (antiCfg.action === 'delete') {
-                        
                     } else {
                         const limit = warnLimits.get(msg.key.remoteJid) || 3;
                         const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
