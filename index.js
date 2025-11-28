@@ -10,6 +10,8 @@ const { enableWelcome, disableWelcome, isWelcomeEnabled, sendWelcomeMessage, sen
 const gemini = require('./features/gemini');
 const createPermissions = require('./permissions');
 const { searchSongs, downloadSong, formatSearchResults } = require('./features/songs');
+const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
+const { searchAnime, getTopAnime, getSeasonalAnime, getRandomAnime, formatAnimeResults, formatAnimeDetails } = require('./features/anime');
 
 // Bot Configuration from .env
 const config = {
@@ -434,6 +436,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}block
 │ ${config.prefix}del
 │ ${config.prefix}sticker
+│ ${config.prefix}img
 │ ${config.prefix}welcome (owner/admin only)
 │ ${config.prefix}gemini
 ╰──────────────────────╯
@@ -442,6 +445,13 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │  📥 *DOWNLOADS*        │
 ╰──────────────────────╯
 │ ${config.prefix}songs - Download songs
+╰──────────────────────╯
+
+╭──────────────────────╮
+│  🎬 *ENTERTAINMENT*    │
+╰──────────────────────╯
+│ ${config.prefix}movie - Movie recommendations
+│ ${config.prefix}anime - Anime recommendations
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1885,6 +1895,11 @@ ${config.prefix}setvar <key> <value>
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
+            if (primary === 'img') {
+                const text = `📖 *${config.prefix}img <prompt>*\n\n*AI Image Generation* ⚠️ _Currently Unavailable_\n\n*Status:* This feature is temporarily disabled.\n\n*Reason:*\nImage generation requires Google Cloud Vertex AI access, which is not available with standard Gemini API keys from AI Studio.\n\n*Alternative Solutions:*\n1. Configure Vertex AI (requires Google Cloud project + billing)\n2. Integrate alternative APIs (DALL-E, Stable Diffusion)\n3. Use web-based image generation services\n\n*What was planned:*\n• Generate 2 AI images per request\n• Various styles and formats\n• Natural language descriptions\n\n*Contact:* Ask the bot owner to configure Vertex AI or an alternative image generation service.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'gemini') {
                 const text = `📖 *${config.prefix}gemini*\n\nChatbot commands:\n- ${config.prefix}gemini on (owner only)\n- ${config.prefix}gemini off (owner only)\n- ${config.prefix}gemini clearchat\n- ${config.prefix}gemini <prompt>\n\nTo set API key (owner only):\n- ${config.prefix}setvar gemini <API_KEY>\n\nNotes:\n- Global toggle applies everywhere\n- Requires GEMINI_API_KEY in .env`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
@@ -1918,6 +1933,174 @@ ${config.prefix}setvar <key> <value>
                   `• Mode: ${config.botMode.toUpperCase()}\n` +
                   `• Status: Active ✅`
         });
+    });
+
+    registerCommand('img', 'Generate images from text using Gemini AI (2 images per prompt)', async (sock, msg, args) => {
+        const prompt = args.join(' ').trim();
+        const jid = msg.key.remoteJid;
+
+        if (!prompt) {
+            await sock.sendMessage(jid, {
+                text: `💡 *Image Generation*\n\n` +
+                      `Please provide a detailed prompt for the image.\n\n` +
+                      `*Example:*\n` +
+                      `${config.prefix}img a realistic photograph of a cyborg cat reading a book in a library\n\n` +
+                      `*Tips:*\n` +
+                      `• Be specific and descriptive\n` +
+                      `• Mention style, colors, mood\n` +
+                      `• Generates 2 images per request`
+            });
+            return;
+        }
+
+        // Check if API key is configured
+        if (!process.env.GEMINI_API_KEY) {
+            await sock.sendMessage(jid, {
+                text: `❌ *Image generation is not available*\n\n` +
+                      `The bot owner has not configured the Gemini API key.\n` +
+                      `Please contact the bot owner to enable this feature.`
+            });
+            return;
+        }
+
+        // Send "generating" message
+        await sock.sendMessage(jid, {
+            text: `🎨 *Generating images...*\n\n` +
+                  `Prompt: "${prompt}"\n\n` +
+                  `Please wait, this may take 10-30 seconds...`
+        });
+
+        // Show typing indicator
+        await sock.sendPresenceUpdate('composing', jid);
+
+        // Generate images
+        const result = await gemini.generateImage(prompt, 2);
+
+        // Stop typing indicator
+        await sock.sendPresenceUpdate('paused', jid);
+
+        if (result.success && result.images) {
+            // Send all generated images
+            for (let i = 0; i < result.images.length; i++) {
+                const imageBuffer = result.images[i];
+                const caption = i === 0
+                    ? `🖼️ *Image ${i + 1}/${result.images.length}*\n\nPrompt: "${prompt}"`
+                    : `🖼️ *Image ${i + 1}/${result.images.length}*`;
+
+                await sock.sendMessage(jid, {
+                    image: imageBuffer,
+                    caption: caption
+                });
+
+                // Small delay between sending multiple images
+                if (i < result.images.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            }
+
+            console.log(`✅ Generated ${result.images.length} images for prompt: "${prompt}"`);
+        } else {
+            // Send error message
+            await sock.sendMessage(jid, {
+                text: result.error || '⚠️ Failed to generate images. Please try again later.'
+            });
+            console.error('❌ Image generation failed:', result.error);
+        }
+    });
+
+    registerCommand('movie', 'Search and get movie recommendations', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const query = args.join(' ').trim();
+
+        try {
+            let movies;
+            let responseText;
+
+            if (!query || query.toLowerCase() === 'trending') {
+                // Get trending movies
+                await sock.sendMessage(jid, { text: '🎬 Fetching trending movies...' });
+                movies = await getTrendingMovies(5);
+                responseText = formatMovieResults(movies, config.prefix);
+            } else if (query.toLowerCase() === 'random') {
+                // Get random movie
+                await sock.sendMessage(jid, { text: '🎬 Finding a random movie for you...' });
+                const movie = await getRandomMovie();
+                responseText = formatMovieDetails(movie);
+
+                // Send poster if available
+                if (movie.poster) {
+                    await sock.sendMessage(jid, {
+                        image: { url: movie.poster },
+                        caption: responseText
+                    });
+                    return;
+                }
+            } else {
+                // Search for movies
+                await sock.sendMessage(jid, { text: `🎬 Searching for "${query}"...` });
+                movies = await searchMovies(query, 5);
+                responseText = formatMovieResults(movies, config.prefix);
+            }
+
+            await sock.sendMessage(jid, { text: responseText });
+
+        } catch (error) {
+            console.error('❌ Movie command error:', error);
+            await sock.sendMessage(jid, {
+                text: error.message.includes('TMDB_API_KEY')
+                    ? '❌ *Movie search is not configured*\n\nThe bot owner needs to add a TMDb API key.\n\n💡 Get a free API key at: https://www.themoviedb.org/settings/api'
+                    : `❌ Error fetching movies: ${error.message}\n\nPlease try again later.`
+            });
+        }
+    });
+
+    registerCommand('anime', 'Search and get anime recommendations', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const query = args.join(' ').trim();
+
+        try {
+            let animes;
+            let responseText;
+
+            if (!query || query.toLowerCase() === 'top') {
+                // Get top anime
+                await sock.sendMessage(jid, { text: '📺 Fetching top anime...' });
+                animes = await getTopAnime(5);
+                responseText = formatAnimeResults(animes, config.prefix);
+            } else if (query.toLowerCase() === 'seasonal' || query.toLowerCase() === 'airing') {
+                // Get seasonal anime
+                await sock.sendMessage(jid, { text: '📺 Fetching currently airing anime...' });
+                animes = await getSeasonalAnime(5);
+                responseText = formatAnimeResults(animes, config.prefix);
+            } else if (query.toLowerCase() === 'random') {
+                // Get random anime
+                await sock.sendMessage(jid, { text: '📺 Finding a random anime for you...' });
+                const anime = await getRandomAnime();
+                responseText = formatAnimeDetails(anime);
+
+                // Send image if available
+                if (anime.image) {
+                    await sock.sendMessage(jid, {
+                        image: { url: anime.image },
+                        caption: responseText
+                    });
+                    return;
+                }
+            } else {
+                // Search for anime
+                await sock.sendMessage(jid, { text: `📺 Searching for "${query}"...` });
+                animes = await searchAnime(query, 5);
+                responseText = formatAnimeResults(animes, config.prefix);
+            }
+
+            await sock.sendMessage(jid, { text: responseText });
+
+        } catch (error) {
+            console.error('❌ Anime command error:', error);
+            await sock.sendMessage(jid, {
+                text: `❌ Error fetching anime: ${error.message}\n\nPlease try again in a few seconds. The Jikan API may be rate-limited.`
+            });
+        }
     });
 
     registerCommand('warnlimit', 'Set warn limit for this group', async (sock, msg, args) => {

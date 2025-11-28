@@ -44,6 +44,101 @@ async function sendMessage(jid, prompt) {
   }
 }
 
+/**
+ * Generates images based on a text prompt
+ * NOTE: Image generation requires Vertex AI access or special API configuration
+ * Standard Gemini API keys from AI Studio do not support image generation
+ * @param {string} prompt - The text description for the image
+ * @param {number} numberOfImages - Number of images to generate (1-4, default 2)
+ * @returns {Promise<{success: boolean, images?: Array<Buffer>, error?: string}>}
+ */
+async function generateImage(prompt, numberOfImages = 2) {
+  // Return informative error - image generation not available with standard API keys
+  return {
+    success: false,
+    error: '❌ *Image Generation Not Available*\n\n' +
+           '📋 *Reason:* Image generation requires Google Cloud Vertex AI access, which is not available with standard Gemini API keys.\n\n' +
+           '💡 *Alternative Solutions:*\n' +
+           '1. Use Vertex AI with a Google Cloud project (paid service)\n' +
+           '2. Use alternative image generation APIs (DALL-E, Stable Diffusion, etc.)\n' +
+           '3. Use image generation web services and integrate via API\n\n' +
+           '⚠️ The bot owner needs to configure a Vertex AI project or use a different image generation service.\n\n' +
+           '_This feature is temporarily unavailable with the current API configuration._'
+  }
+
+  /*
+   * DISABLED CODE - Requires Vertex AI or special configuration
+   *
+  if (!ai) {
+    if (!initializeGemini()) {
+      return { success: false, error: '❌ Gemini API Key not set. Please contact the bot owner to configure the API key.' }
+    }
+  }
+
+  // Validate number of images
+  if (numberOfImages < 1 || numberOfImages > 4) {
+    numberOfImages = 2
+  }
+
+  try {
+    // Attempt 1: Try Imagen model (requires Vertex AI)
+    const response = await ai.models.generateImages({
+      model: 'imagen-3.0-generate-002',
+      prompt: prompt,
+      config: {
+        numberOfImages: numberOfImages,
+        outputMimeType: 'image/jpeg',
+        aspectRatio: '1:1',
+      },
+    })
+
+    const images = response.generatedImages.map(img =>
+      Buffer.from(img.image.imageBytes, 'base64')
+    )
+
+    return { success: true, images }
+
+  } catch (e) {
+    console.error('❌ Image Generation Error:', e)
+
+    // Handle specific error cases
+    if (e.message && e.message.includes('429')) {
+      return {
+        success: false,
+        error: '⚠️ Rate limit reached! The Gemini API quota has been exceeded. Please try again later or contact the bot owner.'
+      }
+    }
+
+    if (e.message && e.message.includes('quota')) {
+      return {
+        success: false,
+        error: '⚠️ API quota exhausted! The daily/monthly limit has been reached. Please try again tomorrow or contact the bot owner.'
+      }
+    }
+
+    if (e.message && e.message.includes('SAFETY')) {
+      return {
+        success: false,
+        error: '⚠️ Your prompt was blocked by content safety filters. Please try a different, appropriate prompt.'
+      }
+    }
+
+    if (e.message && e.message.includes('invalid')) {
+      return {
+        success: false,
+        error: '⚠️ Invalid request. Please provide a clear, descriptive prompt for the image.'
+      }
+    }
+
+    // Generic error
+    return {
+      success: false,
+      error: `⚠️ Failed to generate image: ${e.message || 'Unknown error'}. Please try again or contact the bot owner.`
+    }
+  }
+  */
+}
+
 function clearChatHistory(jid) { return chatSessions.delete(jid) }
 
-module.exports = { initializeGemini, enableChat, disableChat, isChatEnabled, sendMessage, clearChatHistory }
+module.exports = { initializeGemini, enableChat, disableChat, isChatEnabled, sendMessage, clearChatHistory, generateImage }
