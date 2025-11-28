@@ -12,6 +12,8 @@ const createPermissions = require('./permissions');
 const { searchSongs, downloadSong, formatSearchResults } = require('./features/songs');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
 const { searchAnime, getTopAnime, getSeasonalAnime, getRandomAnime, formatAnimeResults, formatAnimeDetails } = require('./features/anime');
+const presence = require('./features/presence');
+const alive = require('./features/alive');
 
 // Bot Configuration from .env
 const config = {
@@ -302,6 +304,11 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             console.log(`🔑 Bot Owner: ${botOwnNumber}\n`);
             console.log('💡 Bot is active and ready to respond to commands!\n');
 
+            // Start presence loop if global presence is enabled
+            try {
+                startPresenceLoop(sock);
+            } catch {}
+
             // Send welcome message after 20 seconds
             console.log('⏳ Will send welcome message in 20 seconds...\n');
             setTimeout(async () => {
@@ -441,6 +448,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}img
 │ ${config.prefix}welcome (owner/admin only)
 │ ${config.prefix}gemini
+│ ${config.prefix}alive
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -470,6 +478,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}antidelete - Anti-delete (owner only)
 │ ${config.prefix}warnlimit - Warn limit
 │ ${config.prefix}antilink - Anti-link
+│ ${config.prefix}wapresence (owner only)
 ╰──────────────────────╯
 
 💡 Type ${config.prefix}help <command> for details
@@ -1357,7 +1366,9 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             'NAME': 'BOT_NAME',
             'AUTOVIEWONCE': 'AUTO_VIEW_ONCE',
             'VIEWONCE': 'AUTO_VIEW_ONCE',
-            'GEMINI': 'GEMINI_API_KEY'
+            'GEMINI': 'GEMINI_API_KEY',
+            'PRESENCE': 'WAPRESENCE_STATE',
+            'WAPRESENCE': 'WAPRESENCE_STATE'
         };
 
         // Use alias mapping if exists
@@ -1381,6 +1392,31 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
                       `Valid values: true, false\n\n` +
                       `Example: ${config.prefix}setvar AUTO_VIEW_ONCE true`
             });
+            return;
+        }
+
+        // Presence: validate and set canonical state
+        if (key === 'WAPRESENCE_STATE') {
+            const mapped = presence.mapInputToState(value);
+            if (!mapped) {
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `❌ Invalid presence value!\n\nValid values: on, off, typing, recording, online\n\nExample: ${config.prefix}setvar presence typing`
+                });
+                return;
+            }
+            const ok = updateEnvFile('WAPRESENCE_STATE', mapped);
+            if (ok) {
+                process.env.WAPRESENCE_STATE = mapped;
+                try {
+                    await sock.sendPresenceUpdate(mapped, msg.key.remoteJid);
+                    if (mapped === 'available') { await sock.sendPresenceUpdate('available'); }
+                } catch {}
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Presence Updated Successfully!*\n\n• State: ${mapped.toUpperCase()}\n\nApplies globally.`
+                });
+            } else {
+                await sock.sendMessage(msg.key.remoteJid, { text: '❌ Failed to update presence in .env' });
+            }
             return;
         }
 
@@ -1933,6 +1969,16 @@ ${config.prefix}setvar <key> <value>
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
+            if (primary === 'alive') {
+                const text = `📖 *${config.prefix}alive*\n\n*Usage:*\n- ${config.prefix}alive → show message\n- ${config.prefix}alive reset → default message\n- ${config.prefix}alive <text> → set custom message (per chat)\n\n*Default:* hey am fiazzy whatsapp bot active for personal uses`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'wapresence') {
+                const text = `📖 *${config.prefix}wapresence* (owner only)\n\nSet global WhatsApp presence:\n- ${config.prefix}wapresence typing\n- ${config.prefix}wapresence recording\n- ${config.prefix}wapresence online\n- ${config.prefix}wapresence off\n\n*Notes:* Applies to all chats and persists until off.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'setvar' && secondary === 'gemini') {
                 const text = `📖 *${config.prefix}setvar gemini <API_KEY>*\n\nSets GEMINI_API_KEY in .env and initializes Gemini.\n\nExample:\n- ${config.prefix}setvar gemini abc123...\n\nOwner only.`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
@@ -2226,6 +2272,7 @@ ${config.prefix}setvar <key> <value>
         try {
             const msg = m.messages[0];
             if (!msg.message) return;
+            try { presenceTargets.add(msg.key.remoteJid); } catch {}
 
             const preText = extractMessageText(msg.message).trim();
             if (msg.key.fromMe && !preText.startsWith(config.prefix)) return;
@@ -2687,4 +2734,70 @@ showMenu().catch(err => {
         const response = await gemini.sendMessage(jid, prompt);
         try { await sock.sendPresenceUpdate('paused', jid); } catch {}
         await sock.sendMessage(jid, { text: response });
+    });
+    const presenceTargets = new Set();
+    try {
+        sock.ev.on('chats.set', ({ chats }) => {
+            try { for (const c of chats) presenceTargets.add(c.id); } catch {}
+        });
+        sock.ev.on('chats.update', (updates) => {
+            try { for (const u of updates) if (u.id) presenceTargets.add(u.id); } catch {}
+        });
+    } catch {}
+    function startPresenceLoop(sockInstance) {
+        const activeStates = new Set(['composing', 'recording', 'available']);
+        setInterval(async () => {
+            const currentState = (process.env.WAPRESENCE_STATE || 'paused').toLowerCase();
+            if (!activeStates.has(currentState)) return;
+            try {
+                if (currentState === 'available') {
+                    await sockInstance.sendPresenceUpdate('available');
+                }
+                for (const jid of presenceTargets) {
+                    await sockInstance.sendPresenceUpdate(currentState, jid);
+                }
+            } catch (e) {}
+        }, 25000);
+    }
+    registerCommand('alive', 'Show or set alive message for this chat', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const text = args.join(' ').trim();
+        if (!text) {
+            const message = alive.getAliveMessage();
+            const formatted = `💫 *Fiazzy-MD Alive*\n\n${message}\n\n⚡ Powered by Fiazzy-MD`;
+            await sock.sendMessage(jid, { text: formatted });
+            return;
+        }
+        if (text.toLowerCase() === 'reset') {
+            alive.clearAliveMessage();
+            const formatted = `💫 *Fiazzy-MD Alive*\n\n${alive.DEFAULT_ALIVE}\n\n⚡ Powered by Fiazzy-MD`;
+            await sock.sendMessage(jid, { text: formatted });
+            return;
+        }
+        alive.setAliveMessage(null, text);
+        await sock.sendMessage(jid, { text: `✅ Alive message updated globally.` });
+    });
+
+    registerCommand('wapresence', 'Set global WhatsApp presence (owner only)', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Only the bot owner can use this command.' }); return; }
+        const sub = (args[0] || '').toLowerCase();
+        const state = presence.mapInputToState(sub);
+        if (!state) { await sock.sendMessage(jid, { text: `❌ Invalid presence state. Use: ${config.prefix}wapresence <on|off|typing|recording|online>` }); return; }
+        const ok = updateEnvFile('WAPRESENCE_STATE', state);
+        if (ok) {
+            process.env.WAPRESENCE_STATE = state;
+            try {
+                presenceTargets.add(jid);
+                if (state === 'available') { await sock.sendPresenceUpdate('available'); }
+                await sock.sendPresenceUpdate(state, jid);
+            } catch {}
+            await sock.sendMessage(jid, { text: `✅ Presence set to *${state.toUpperCase()}* globally.` });
+        } else {
+            await sock.sendMessage(jid, { text: '❌ Failed to update presence in .env' });
+        }
     });
