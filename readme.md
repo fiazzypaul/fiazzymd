@@ -17,6 +17,9 @@ A WhatsApp bot built with Baileys that supports both QR code and pairing code au
 - Message logging
 - Clean QR code display (no deprecation warnings)
 - Stable connection (no error 500 loops!)
+ - Alive message (global, pretty output)
+ - Owner-only global presence (typing/recording/online)
+ - Repository info command (.repo)
 
 ## Installation
 
@@ -48,6 +51,15 @@ OWNER_NUMBER=1234567890
 # Bot Information
 BOT_NAME=FiazzyMD
 BOT_VERSION=1.0.0
+
+# Presence (owner-only global)
+# WAPRESENCE_STATE: composing | recording | available | paused
+WAPRESENCE_STATE=paused
+
+# TMDb API Key for movies (set one of these)
+# Primary key
+TMDB_API_KEY=your_tmdb_key_here
+
 ```
 
 ### Configuration Options:
@@ -59,6 +71,9 @@ BOT_VERSION=1.0.0
 - **OWNER_NUMBER**: Your phone number (country code without +)
 - **BOT_NAME**: Name of your bot
 - **BOT_VERSION**: Version number
+- **WAPRESENCE_STATE**: Global presence state (`composing`, `recording`, `available`, `paused`)
+- **TMDB_API_KEY**: TMDb key for movie recommendations (recommended)
+- **FALLBACK_TMDB_API_KEY**: Optional fallback TMDb key if primary is missing
 
 ## Usage
 
@@ -167,6 +182,10 @@ All commands use the prefix set in your `.env` file (default is `.`):
   - Bot mode (Public/Private)
   - Connection status
 
+- **`.repo`** - Show bot repository link and creator info
+  - Link: `https://github.com/fiazzypaul/fiazzymd.git`
+  - Creator: `fiazzypaul (2349019151146)`
+
 ### Group Management Commands:
 
 - **`.add <number>`** - Add a member to the group
@@ -202,6 +221,10 @@ All commands use the prefix set in your `.env` file (default is `.`):
   - Admin only (owner can bypass)
   - Cancels any active auto-unmute timer
 
+- **`.del`** - Delete the replied message
+  - Admin only (owner can bypass)
+  - Group-only
+
 ### Command Examples:
 
 ```
@@ -216,6 +239,9 @@ All commands use the prefix set in your `.env` file (default is `.`):
 .tag Hello everyone!
 .mute 30
 .unmute
+.repo
+.alive
+.wapresence typing
 ```
 
 ### Permission System:
@@ -231,8 +257,8 @@ All commands use the prefix set in your `.env` file (default is `.`):
 
 **Private Mode (BOT_MODE=private):**
 - Only the owner can use all commands
-- Other users' commands are silently ignored
-- Console shows unauthorized access attempts
+- Other users' commands are silently ignored (no reply)
+- Console logs unauthorized attempts
 
 ## Project Structure
 

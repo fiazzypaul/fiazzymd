@@ -1,7 +1,7 @@
 module.exports = (config) => {
-  const groupAdminCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn', 'welcome']);
-  const groupOnlyCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn', 'welcome']);
-  const generalCommands = new Set(['menu', 'ping', 'help', 'session', 'vv', 'del', 'sticker', 'img', 'movie', 'anime', 'alive']);
+  const groupAdminCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn', 'welcome', 'del']);
+  const groupOnlyCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn', 'welcome', 'del']);
+  const generalCommands = new Set(['menu', 'ping', 'help', 'session', 'vv', 'sticker', 'img', 'movie', 'anime', 'alive']);
   const varCommands = new Set(['autoviewonce', 'setvar', 'mode', 'prefix', 'ownernumber', 'seevar', 'antidelete', 'wapresence']); // Commands that modify global .env settings
 
   const isGroup = (jid) => jid.endsWith('@g.us');
@@ -98,9 +98,9 @@ module.exports = (config) => {
       return { allowed: false, reason: '❌ Only the bot owner can use this command!' };
     }
 
-    // Non-owner users: Private mode blocks all commands
+    // Non-owner users: Private mode blocks all commands silently
     if (config.botMode === 'private') {
-      return { allowed: false, reason: '❌ Bot is in private mode. Only the owner can use commands!' };
+      return { allowed: false, silent: true };
     }
 
     // Public mode: Check group-only commands

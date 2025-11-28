@@ -441,6 +441,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}ping
 │ ${config.prefix}help
 │ ${config.prefix}session
+│ ${config.prefix}repo
 │ ${config.prefix}vv
 │ ${config.prefix}block
 │ ${config.prefix}del
@@ -1965,6 +1966,11 @@ ${config.prefix}setvar <key> <value>
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
+            if (primary === 'repo') {
+                const text = `📖 *${config.prefix}repo*\n\nShows the bot repository link and creator info:\n\n• Repo: https://github.com/fiazzypaul/fiazzymd.git\n• Creator: fiazzypaul (2349019151146)`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'gemini') {
                 const text = `📖 *${config.prefix}gemini*\n\nChatbot commands:\n- ${config.prefix}gemini on (owner only)\n- ${config.prefix}gemini off (owner only)\n- ${config.prefix}gemini clearchat\n- ${config.prefix}gemini <prompt>\n\nTo set API key (owner only):\n- ${config.prefix}setvar gemini <API_KEY>\n\nNotes:\n- Global toggle applies everywhere\n- Requires GEMINI_API_KEY in .env`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
@@ -2008,6 +2014,15 @@ ${config.prefix}setvar <key> <value>
                   `• Mode: ${config.botMode.toUpperCase()}\n` +
                   `• Status: Active ✅`
         });
+    });
+
+    registerCommand('repo', 'Show bot repository link and creator info', async (sock, msg) => {
+        const text = `📦 *FiazzyMD Repository*\n\n` +
+                     `🔗 https://github.com/fiazzypaul/fiazzymd.git\n\n` +
+                     `👤 Made by *fiazzypaul*\n` +
+                     `📞 Creator: 2349019151146\n\n` +
+                     `✨ Star the repo and share!`;
+        await sock.sendMessage(msg.key.remoteJid, { text });
     });
 
     registerCommand('img', 'Generate images from text using Gemini AI (2 images per prompt)', async (sock, msg, args) => {
@@ -2562,6 +2577,10 @@ ${config.prefix}setvar <key> <value>
             // Check bot mode and permissions
             const permission = await PermissionsObj.canRunCommand(sock, msg, commandName);
             if (!permission.allowed) {
+                if (permission.silent) {
+                    console.log('❌ Permission denied (silent).');
+                    return;
+                }
                 console.log('❌ Permission denied:', permission.reason);
                 await sock.sendMessage(msg.key.remoteJid, { text: permission.reason });
                 return;
