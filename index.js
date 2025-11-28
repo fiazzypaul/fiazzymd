@@ -2661,8 +2661,11 @@ showMenu().catch(err => {
         const jid = msg.key.remoteJid;
         const sub = (args[0] || '').toLowerCase();
         if (sub === 'on' || sub === 'off') {
-            const senderNumber = (msg.key.participant || msg.key.remoteJid).split('@')[0];
-            if (senderNumber !== config.ownerNumber) {
+            const senderJid = msg.key.participant || msg.key.remoteJid;
+            const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+            const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+            const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+            if (!isOwner) {
                 await sock.sendMessage(jid, { text: '❌ Only the bot owner can toggle Gemini.' });
                 return;
             }
