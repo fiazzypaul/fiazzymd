@@ -15,6 +15,9 @@ const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, for
 const { searchAnime, getTopAnime, getSeasonalAnime, getRandomAnime, formatAnimeResults, formatAnimeDetails } = require('./features/anime');
 const presence = require('./features/presence');
 const alive = require('./features/alive');
+const ytsFeature = require('./features/yts');
+const scheduler = require('./features/scheduler');
+const jids = require('./features/jids');
 
 // Bot Configuration from .env
 const config = {
@@ -310,6 +313,11 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
                 startPresenceLoop(sock);
             } catch {}
 
+            // Start message scheduler
+            try {
+                scheduler.startScheduler(sock);
+            } catch {}
+
             // Send welcome message after 20 seconds
             console.log('⏳ Will send welcome message in 20 seconds...\n');
             setTimeout(async () => {
@@ -448,16 +456,22 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}del
 │ ${config.prefix}sticker
 │ ${config.prefix}img
+│ ${config.prefix}getjid
+│ ${config.prefix}savejid
 │ ${config.prefix}welcome (owner/admin only)
 │ ${config.prefix}gemini
 │ ${config.prefix}alive
 │ ${config.prefix}wapresence (owner only)
+│ ${config.prefix}schedule (owner only)
+│ ${config.prefix}schedules (owner only)
+│ ${config.prefix}schedulecancel (owner only)
 ╰──────────────────────╯
 
 ╭──────────────────────╮
 │  📥 *DOWNLOADS*        │
 ╰──────────────────────╯
 │ ${config.prefix}songs - Download songs
+│ ${config.prefix}yts   - YouTube search
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1973,6 +1987,36 @@ ${config.prefix}setvar <key> <value>
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
+            if (primary === 'yts') {
+                const text = `📖 *${config.prefix}yts*\n\nYouTube search.\n\n*Usage:*\n- ${config.prefix}yts <query> → list videos\n- ${config.prefix}yts <youtube_url> → show details\n\n*Example:*\n- ${config.prefix}yts baymax`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'getjid') {
+                const text = `📖 *${config.prefix}getjid*\n\nShow the current chat JID.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'savejid') {
+                const text = `📖 *${config.prefix}savejid*\n\nSave a name → JID mapping.\n\n*Usage:*\n- ${config.prefix}savejid <jid> <name>\n- Reply to a message that includes a JID and run: ${config.prefix}savejid <name>\n- ${config.prefix}savejid <name> (saves current chat JID)`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'schedule') {
+                const text = `📖 *${config.prefix}schedule* (owner only)\n\nSchedule a message:\n- ${config.prefix}schedule in 10m <text>\n- ${config.prefix}schedule in 2h <text>\n- ${config.prefix}schedule at 2025-12-01 14:30 <text>\n- ${config.prefix}schedule at 2025-12-01 14:30 <jid> <text>`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'schedules') {
+                const text = `📖 *${config.prefix}schedules* (owner only)\n\nList upcoming scheduled messages.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'schedulecancel') {
+                const text = `📖 *${config.prefix}schedulecancel <id>* (owner only)\n\nCancel a scheduled message by ID.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'repo') {
                 const text = `📖 *${config.prefix}repo*\n\nShows the bot repository link and creator info:\n\n• Repo: https://github.com/fiazzypaul/fiazzymd.git\n• Creator: fiazzypaul (2349019151146)`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
@@ -2057,6 +2101,112 @@ ${config.prefix}setvar <key> <value>
             }
         }
     });
+
+    registerCommand('yts', 'YouTube search results', async (sock, msg, args) => {
+        const q = args.join(' ').trim();
+        const jid = msg.key.remoteJid;
+        if (!q) { await sock.sendMessage(jid, { text: `💡 Usage: ${config.prefix}yts <query or youtube_url>` }); return; }
+        try {
+            const text = await ytsFeature.ytsSearchText(q);
+            await sock.sendMessage(jid, { text });
+        } catch (e) {
+            await sock.sendMessage(jid, { text: `❌ Failed to search YouTube: ${e.message}` });
+        }
+    });
+
+    registerCommand('getjid', 'Show current chat JID', async (sock, msg) => {
+        const jid = msg.key.remoteJid;
+        await sock.sendMessage(jid, { text: `🆔 JID: ${jid}` });
+    });
+
+    registerCommand('savejid', 'Save a name → JID mapping', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        let provided = args[0] || '';
+        let name = args.slice(1).join(' ').trim();
+        let targetJid = null;
+        if (provided && (provided.includes('@s.whatsapp.net') || provided.includes('@g.us'))) {
+            targetJid = provided.trim();
+        } else {
+            const quotedText = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage?.extendedTextMessage?.text || '';
+            targetJid = jids.extractJidFromText(quotedText);
+            if (!targetJid && !name) {
+                // If only one arg, treat it as name and use current chat JID
+                name = provided.trim();
+                targetJid = msg.key.remoteJid;
+            }
+        }
+        if (!targetJid || !name) { await sock.sendMessage(jid, { text: `💡 Usage:\n- ${config.prefix}savejid <jid> <name>\n- Reply to a message that includes a JID and run: ${config.prefix}savejid <name>\n- ${config.prefix}savejid <name> (saves current chat JID)` }); return; }
+        const ok = jids.saveJid(name, targetJid);
+        await sock.sendMessage(jid, { text: ok ? `✅ Saved: ${name.toLowerCase()} → ${targetJid}` : '❌ Failed to save JID' });
+    });
+
+    // Owner-only Message Scheduler
+    registerCommand('schedule', 'Schedule a message (owner only)', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
+        const raw = args.join(' ').trim();
+        if (!raw) { await sock.sendMessage(jid, { text: `💡 Usage:\n- ${config.prefix}schedule in 10m <text>\n- ${config.prefix}schedule at 2025-12-01 14:30 <text>\n- ${config.prefix}schedule at 2025-12-01 14:30 <jid> <text>` }); return; }
+        let targetJid = jid;
+        let timestamp = null;
+        let text = '';
+        if (raw.startsWith('in ')) {
+            const m = raw.match(/^in\s+(\d+)([mh])\s+([\s\S]+)$/);
+            if (!m) { await sock.sendMessage(jid, { text: '❌ Invalid format. Example: schedule in 10m Hello' }); return; }
+            const n = parseInt(m[1]); const unit = m[2]; text = m[3];
+            const delta = unit === 'm' ? n * 60000 : n * 3600000;
+            timestamp = Date.now() + delta;
+        } else if (raw.startsWith('at ')) {
+            const m = raw.match(/^at\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})(?:\s+([^\s]+))?\s+([\s\S]+)$/);
+            if (!m) { await sock.sendMessage(jid, { text: '❌ Invalid format. Example: schedule at 2025-12-01 14:30 Hello' }); return; }
+            const dateStr = m[1]; const timeStr = m[2]; const maybeJid = m[3]; text = m[4];
+            const dt = new Date(`${dateStr}T${timeStr}:00`);
+            timestamp = dt.getTime();
+            if (maybeJid) {
+                const resolved = jids.resolveJid(maybeJid);
+                if (!resolved) { await sock.sendMessage(jid, { text: `❌ Unknown JID or name: ${maybeJid}` }); return; }
+                targetJid = resolved;
+            }
+        } else { await sock.sendMessage(jid, { text: '❌ Start with "in" or "at".' }); return; }
+        if (!timestamp || isNaN(timestamp)) { await sock.sendMessage(jid, { text: '❌ Invalid time.' }); return; }
+        const id = `sch_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+        scheduler.addSchedule({ id, jid: targetJid, text, timestamp, createdBy: senderJid });
+        await sock.sendMessage(jid, { text: `✅ Scheduled (ID: ${id})\n• Chat: ${targetJid}\n• Time: ${new Date(timestamp).toLocaleString()}` });
+    });
+
+    registerCommand('schedules', 'List scheduled messages (owner only)', async (sock, msg) => {
+        const jid = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
+        const items = scheduler.listSchedules();
+        if (!items.length) { await sock.sendMessage(jid, { text: 'ℹ️ No scheduled messages.' }); return; }
+        let text = '📅 *Scheduled Messages*\n\n';
+        for (const it of items) { text += `• ID: ${it.id}\n  Chat: ${it.jid}\n  Time: ${new Date(it.timestamp).toLocaleString()}\n  Text: ${it.text.slice(0,60)}\n\n`; }
+        await sock.sendMessage(jid, { text });
+    });
+
+    registerCommand('schedulecancel', 'Cancel a scheduled message (owner only)', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
+        const id = (args[0] || '').trim();
+        if (!id) { await sock.sendMessage(jid, { text: `💡 Usage: ${config.prefix}schedulecancel <id>` }); return; }
+        scheduler.removeSchedule(id);
+        await sock.sendMessage(jid, { text: `✅ Cancelled schedule ${id}` });
+    });
+
+    // .song command removed by owner request
+
+    // .video command removed by owner request
 
     registerCommand('movie', 'Search and get movie recommendations', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
