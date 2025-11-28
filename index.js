@@ -366,9 +366,11 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             return { allowed: false };
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Owner can bypass all checks
         if (isOwner) {
@@ -519,9 +521,11 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             });
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Check if user is admin (owner can bypass in any mode)
         if (!isOwner) {
@@ -687,9 +691,11 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             });
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Check if user is admin (owner can bypass in any mode)
         if (!isOwner) {
@@ -747,9 +753,11 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             });
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Check if user is admin (owner can bypass in any mode)
         if (!isOwner) {
@@ -809,9 +817,11 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             });
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Check if user is admin (owner can bypass in any mode)
         if (!isOwner) {
@@ -869,9 +879,11 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             });
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Check if user is admin (owner can bypass in any mode)
         if (!isOwner) {
@@ -1682,9 +1694,11 @@ ${config.prefix}setvar <key> <value>
             });
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Check if user is admin (owner can bypass in any mode)
         if (!isOwner) {
@@ -1766,9 +1780,11 @@ ${config.prefix}setvar <key> <value>
             });
         }
 
-        // Get sender number
-        const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-        const isOwner = senderNumber === config.ownerNumber;
+        // Robust owner detection (handles LIDs and self messages)
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
 
         // Check if user is admin (owner can bypass in any mode)
         if (!isOwner) {
