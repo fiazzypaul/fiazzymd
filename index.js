@@ -574,43 +574,42 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
                 });
             } else if (statusCode === 403 || statusCode === '403') {
                 // User privacy blocked - send invite link
-                console.log('⚠️  User privacy blocked. Attempting to generate invite link...');
+                console.log('⚠️  User privacy blocked. Attempting to use user-specific invite code...');
+                console.log('📊 Full userResult:', JSON.stringify(userResult, null, 2));
 
                 try {
-                    // Check if bot owner/user is admin (required to generate invite links)
-                    // Note: WhatsApp bots can't be admins - the owner's account that's logged in is what matters
-                    const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
+                    // Extract the user-specific invite code from the add_request response
+                    // This is NOT the main group invite link - it's a temporary 3-day invite for this specific user
+                    const addRequest = userResult.content?.content?.find(item => item.tag === 'add_request');
+                    const userSpecificCode = addRequest?.attrs?.code;
+                    const inviteExpiration = addRequest?.attrs?.expiration;
 
-                    // Get the bot owner's number (the account running the bot)
-                    const botOwnerNumber = sock.user.id.split(':')[0];
+                    console.log('🔍 Add request data:', {
+                        addRequest,
+                        userSpecificCode,
+                        inviteExpiration
+                    });
 
-                    console.log('🔍 Bot owner number:', botOwnerNumber);
-                    console.log('📋 Group participants:', groupMetadata.participants.map(p => ({
-                        id: p.id,
-                        admin: p.admin
-                    })));
-
-                    // Check if ANY admin exists in the group
-                    const hasAdmins = groupMetadata.participants.some(p => p.admin === 'admin' || p.admin === 'superadmin');
-
-                    if (!hasAdmins) {
+                    if (!userSpecificCode) {
+                        console.error('❌ No user-specific invite code found in response');
                         await sock.sendMessage(msg.key.remoteJid, {
                             text: `⚠️ Could not add @${number} due to privacy settings.\n\n` +
-                                  `❌ Cannot send invite: No admins found in group.`,
+                                  `❌ Failed to generate invite: No invite code in response`,
                             mentions: [userJid]
                         });
                         return;
                     }
 
-                    // Try to generate invite code (will succeed if the bot owner's account has permission)
-                    console.log('⚡ Attempting to generate invite code...');
-                    const inviteCode = await sock.groupInviteCode(msg.key.remoteJid);
+                    // Use the user-specific invite code (NOT the main group invite)
+                    const inviteCode = userSpecificCode;
                     const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
-                    console.log('✅ Generated invite link:', inviteLink);
+                    console.log('✅ Using user-specific invite code:', inviteCode);
+                    console.log('🔗 Invite link:', inviteLink);
+                    console.log('⏰ Expiration:', inviteExpiration ? new Date(parseInt(inviteExpiration) * 1000).toISOString() : 'unknown');
 
                     // Get group metadata for the invite card
+                    const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
                     const groupName = groupMetadata.subject;
-                    const inviteExpiration = Math.floor(Date.now() / 1000) + (3 * 24 * 60 * 60); // 3 days from now
 
                     // Try to get group icon
                     let groupIconBuffer = null;
@@ -618,29 +617,23 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
                         const groupIconUrl = await sock.profilePictureUrl(msg.key.remoteJid, 'image');
                         if (groupIconUrl) {
                             const response = await fetch(groupIconUrl);
-                            groupIconBuffer = await response.buffer();
+                            const arrayBuffer = await response.arrayBuffer();
+                            groupIconBuffer = Buffer.from(arrayBuffer);
                         }
                     } catch (iconError) {
                         console.log('⚠️  Could not fetch group icon:', iconError.message);
                     }
 
-                    // Build the group invite message
-                    const inviteMessage = {
-                        jid: msg.key.remoteJid,           // Group JID
-                        name: groupName,                   // Group name
-                        caption: 'Invitation to join my WhatsApp group',
-                        code: inviteCode,                  // Invite code
-                        expiration: inviteExpiration       // Expiration timestamp
-                    };
-
-                    // Only add thumbnail if we have one
-                    if (groupIconBuffer) {
-                        inviteMessage.jpegThumbnail = groupIconBuffer;
-                    }
-
-                    // Send official WhatsApp group invite card
+                    // Build the group invite message using Baileys format
+                    // Baileys expects 'groupInvite' key with specific field names
                     await sock.sendMessage(userJid, {
-                        groupInvite: inviteMessage
+                        groupInvite: {
+                            inviteCode: inviteCode,                          // User-specific invite code
+                            inviteExpiration: parseInt(inviteExpiration),    // Expiration timestamp (as number)
+                            text: 'Invitation to join my WhatsApp group',   // Caption text
+                            jid: msg.key.remoteJid,                          // Group JID
+                            subject: groupName                                // Group name
+                        }
                     });
 
                     console.log('✅ Sent official group invite card to user');
