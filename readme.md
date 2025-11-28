@@ -302,63 +302,6 @@ pnpm clean
 
 Note: This will delete the old `auth_info_baileys` folder if it exists (from older versions).
 
-## Adding Custom Commands
-
-You can easily add your own commands! Edit [index.js](index.js) and add new commands after the existing commands:
-
-```javascript
-// Simple command
-registerCommand('mycommand', 'Description of my command', async (sock, msg, args) => {
-    await sock.sendMessage(msg.key.remoteJid, {
-        text: '🎉 My custom response!'
-    });
-});
-
-// Command with arguments
-registerCommand('echo', 'Echo back your message', async (sock, msg, args) => {
-    const text = args.join(' ') || 'No message provided';
-    await sock.sendMessage(msg.key.remoteJid, {
-        text: `📢 You said: ${text}`
-    });
-});
-
-// Admin-only command (owner can bypass)
-registerCommand('admincmd', 'Admin only command', async (sock, msg, args) => {
-    if (!isGroup(msg.key.remoteJid)) {
-        return await sock.sendMessage(msg.key.remoteJid, {
-            text: '❌ This command is only for groups!'
-        });
-    }
-
-    const senderNumber = msg.key.participant ? msg.key.participant.split('@')[0] : msg.key.remoteJid.split('@')[0];
-    const isOwner = senderNumber === config.ownerNumber;
-
-    if (!isOwner) {
-        if (config.botMode === 'private') {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is restricted to bot owner in private mode!'
-            });
-        }
-
-        if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant))) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ Only admins can use this command!'
-            });
-        }
-    }
-
-    await sock.sendMessage(msg.key.remoteJid, {
-        text: '✅ Admin command executed!'
-    });
-});
-```
-
-Your commands will automatically:
-- Appear in `.menu`
-- Work with `.help`
-- Respect public/private mode
-- Use your configured prefix
-- Support owner bypass for admin commands
 
 ## Dependencies
 
@@ -368,31 +311,6 @@ Your commands will automatically:
 - `dotenv` - Environment variable management
 
 ## Troubleshooting
-
-**Deprecation Warning for QR Code:**
-- ✅ Fixed! The bot now handles QR codes manually without using the deprecated `printQRInTerminal` option
-
-**QR Code too big:**
-- ✅ Fixed! QR codes are now displayed in compact mode using `{ small: true }`
-
-**Connection closed repeatedly (Error 500/515):**
-- ✅ Fixed! The bot now uses stable connection settings
-- Key fixes applied:
-  - ❌ Removed `fetchLatestBaileysVersion()` - This causes 90% of error 500 issues
-  - ✅ Using real browser info: `Chrome (Linux)`
-  - ✅ Increased keepalive to 45 seconds
-  - ✅ Disabled `syncFullHistory` to reduce load
-  - ✅ **Welcome message disabled by default** - This was causing most disconnections!
-  - ✅ Exponential backoff (3s, 6s, 9s, 12s, 15s) for reconnections
-  - ✅ Max 5 reconnection attempts to prevent rate limiting
-
-**Important: Welcome Message**
-- The automatic welcome message is **disabled by default** to prevent error 500
-- Sending messages immediately after connection causes WhatsApp to disconnect
-- If you want to enable it, edit `index.js` around line 193 and uncomment the code
-- If enabled, it waits 20 seconds before sending (but still might cause issues)
-- **Recommendation:** Keep it disabled and just send yourself a "ping" message to test
-
 **If still getting errors:**
 - Delete the session folder: `rmdir /s /q sessions\session_name`
 - Reconnect with fresh QR/pairing code
