@@ -2222,7 +2222,7 @@ ${config.prefix}setvar <key> <value>
         const current = antiLinkSettings.get(msg.key.remoteJid) || { enabled: false, action: 'warn' };
         if (sub === 'on') {
             current.enabled = true;
-            current.action = actionArg === 'kick' ? 'kick' : 'warn';
+            current.action = actionArg === 'kick' ? 'kick' : actionArg === 'delete' ? 'delete' : 'warn';
             antiLinkSettings.set(msg.key.remoteJid, current);
             await sock.sendMessage(msg.key.remoteJid, { text: `✅ Anti-link enabled (${current.action})` });
         } else if (sub === 'off') {
@@ -2230,7 +2230,7 @@ ${config.prefix}setvar <key> <value>
             antiLinkSettings.set(msg.key.remoteJid, current);
             await sock.sendMessage(msg.key.remoteJid, { text: '✅ Anti-link disabled' });
         } else {
-            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Anti-link is ${current.enabled ? 'ON' : 'OFF'} (${current.action})\n\nUse ${config.prefix}antilink on [warn|kick] or ${config.prefix}antilink off` });
+            await sock.sendMessage(msg.key.remoteJid, { text: `📊 Anti-link is ${current.enabled ? 'ON' : 'OFF'} (${current.action})\n\nUse ${config.prefix}antilink on [warn|kick|delete] or ${config.prefix}antilink off` });
         }
     });
 
@@ -2402,6 +2402,8 @@ ${config.prefix}setvar <key> <value>
                         } catch (e) {
                             await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Failed to kick: ${e.message}` });
                         }
+                    } else if (antiCfg.action === 'delete') {
+                        
                     } else {
                         const limit = warnLimits.get(msg.key.remoteJid) || 3;
                         const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
