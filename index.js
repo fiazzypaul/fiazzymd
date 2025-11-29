@@ -271,8 +271,11 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 
     // Handle pairing code BEFORE connection events - Official Baileys approach
     if (usePairingCode && !sock.authState.creds.registered) {
-        const phoneNumber = await question('\n📱 Enter your WhatsApp phone number:\n   (with country code, no + or spaces)\n   Example: 2349012345678\n\n   Number: ');
-        const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+        let cleanNumber = (process.env.PAIR_NUMBER || '').replace(/[^0-9]/g, '');
+        if (!cleanNumber) {
+            const phoneNumber = await question('\n📱 Enter your WhatsApp phone number:\n   (with country code, no + or spaces)\n   Example: 2349012345678\n\n   Number: ');
+            cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+        }
 
         if (!cleanNumber || cleanNumber.length < 10) {
             console.error('\n❌ Invalid phone number format');
@@ -2869,8 +2872,20 @@ async function showMenu() {
     console.log('║   🤖 FiazzyMD WhatsApp Bot Setup   ║');
     console.log('╚════════════════════════════════════╝\n');
 
-    // Session selection
-    const sessionPath = await sessionManager.selectSession();
+    // Non-interactive bootstrap for PM2 or env-driven setups
+    const envSessionName = process.env.SESSION_NAME || null;
+    const envAuthMethod = (process.env.AUTH_METHOD || '').toLowerCase();
+    const isNonInteractive = !!envSessionName || !process.stdin.isTTY || process.env.FORCE_NON_INTERACTIVE === 'true' || system.isManagedByPM2();
+    let sessionPath;
+    if (isNonInteractive) {
+        const name = envSessionName || 'session1';
+        sessionManager.currentSession = name;
+        sessionPath = path.join(sessionManager.sessionsDir, name);
+        try { if (!fs.existsSync(sessionPath)) fs.mkdirSync(sessionPath, { recursive: true }); } catch {}
+    } else {
+        // Session selection
+        sessionPath = await sessionManager.selectSession();
+    }
 
     // Check if session already has credentials
     if (fs.existsSync(path.join(sessionPath, 'creds.json'))) {
@@ -2878,24 +2893,32 @@ async function showMenu() {
         return await connectToWhatsApp(false, sessionPath);
     }
 
-    console.log('Choose your connection method:\n');
-    console.log('  1️⃣  QR Code (Scan with phone)');
-    console.log('  2️⃣  Pairing Code (Enter code on phone)\n');
-
-    const choice = await question('Enter your choice (1 or 2): ');
-
-    console.log(''); // Empty line for spacing
-
-    if (choice === '1') {
-        console.log('🔄 Starting QR Code authentication...\n');
-        return await connectToWhatsApp(false, sessionPath);
-    } else if (choice === '2') {
-        console.log('🔄 Starting Pairing Code authentication...\n');
-        return await connectToWhatsApp(true, sessionPath);
+    if (isNonInteractive) {
+        const method = envAuthMethod === 'pair' ? 'pair' : 'qr';
+        if (method === 'pair') {
+            console.log('🔄 Starting Pairing Code authentication...\n');
+            return await connectToWhatsApp(true, sessionPath);
+        } else {
+            console.log('🔄 Starting QR Code authentication...\n');
+            return await connectToWhatsApp(false, sessionPath);
+        }
     } else {
-        console.log('❌ Invalid choice. Please run the bot again and select 1 or 2.\n');
-        rl.close();
-        process.exit(1);
+        console.log('Choose your connection method:\n');
+        console.log('  1️⃣  QR Code (Scan with phone)');
+        console.log('  2️⃣  Pairing Code (Enter code on phone)\n');
+        const choice = await question('Enter your choice (1 or 2): ');
+        console.log('');
+        if (choice === '1') {
+            console.log('🔄 Starting QR Code authentication...\n');
+            return await connectToWhatsApp(false, sessionPath);
+        } else if (choice === '2') {
+            console.log('🔄 Starting Pairing Code authentication...\n');
+            return await connectToWhatsApp(true, sessionPath);
+        } else {
+            console.log('❌ Invalid choice. Please run the bot again and select 1 or 2.\n');
+            rl.close();
+            process.exit(1);
+        }
     }
 }
 
