@@ -69,15 +69,23 @@ async function checkForUpdates() {
     await execPromise('git fetch');
     const { stdout: local } = await execPromise('git rev-parse HEAD');
     const { stdout: remote } = await execPromise('git rev-parse origin/HEAD');
-    if (local.trim() !== remote.trim()) {
+    const remoteCommit = remote.trim();
+    const localCommit = local.trim();
+
+    if (localCommit !== remoteCommit) {
       const { stdout: ahead } = await execPromise('git rev-list --left-right --count HEAD...origin/HEAD');
       const parts = ahead.trim().split('\t');
       const behind = parseInt(parts[1] || '0', 10);
-      return { hasUpdates: true, aheadBy: behind, message: `📦 Updates available: ${behind} commits. Run .update` };
+      return {
+        hasUpdates: true,
+        aheadBy: behind,
+        remoteCommit: remoteCommit,
+        message: `📦 Updates available: ${behind} commit${behind > 1 ? 's' : ''}. Run .update`
+      };
     }
-    return { hasUpdates: false, aheadBy: 0, message: 'Up to date' };
+    return { hasUpdates: false, aheadBy: 0, remoteCommit: remoteCommit, message: 'Up to date' };
   } catch (e) {
-    return { hasUpdates: false, aheadBy: 0, message: `Update check failed: ${e.message}` };
+    return { hasUpdates: false, aheadBy: 0, remoteCommit: null, message: `Update check failed: ${e.message}` };
   }
 }
 
