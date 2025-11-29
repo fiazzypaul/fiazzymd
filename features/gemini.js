@@ -32,15 +32,7 @@ async function sendMessage(jid, prompt) {
   if (!ai) { if (!initializeGemini()) return '❌ Gemini API Key not set. Use `.setvar gemini YOUR_API_KEY` to set it.' }
   let chat = chatSessions.get(jid)
   if (!chat) {
-    chat = ai.chats.create({ model: 'gemini-2.5-flash', config: { systemInstruction: 'Persona and Goal:
-- Persona: A helpful, friendly, and conversational WhatsApp chatbot.
-- Primary Goal: To assist the user while maintaining a casual, brief, and mobile-friendly tone.
-
-RULES:
-1. Language Identification and Response: You MUST internally identify the user's language (including Nigerian local languages) to understand the meaning, but you MUST respond ONLY in English. Do not translate the user's original message in the final output.
-2. Tone and Empathy: Analyze the user's message for its tone (e.g., happy, frustrated, confused, urgent) and adjust your reply to match or respond appropriately (e.g., offer empathy if frustrated or confusing language).
-3. Current Events and Knowledge: When asked about current events, real-time information, or complex data, use the Google Search tool to look it up before providing the answer.
-4. Brevity: Keep your responses concise and suitable for a mobile chat interface, prioritizing directness over lengthy explanations. ' } })
+    chat = ai.chats.create({ model: 'gemini-2.5-flash', config: { systemInstruction: 'You are a helpful WhatsApp chatbot. Keep responses concise and relevant.' } })
     chatSessions.set(jid, chat)
   }
   try {
