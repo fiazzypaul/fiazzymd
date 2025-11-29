@@ -393,13 +393,20 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
                 scheduler.startScheduler(sock);
             } catch {}
 
+            // Track last notified commit to prevent duplicate notifications
+            let lastNotifiedCommit = null;
+
             try {
                 setInterval(async () => {
                     try {
                         const res = await system.checkForUpdates();
-                        if (res.hasUpdates) {
-                            const ownerJid = String(config.ownerNumber).replace(/[^0-9]/g, '') + '@s.whatsapp.net';
-                            await sock.sendMessage(ownerJid, { text: `🔔 ${res.message}` });
+                        if (res.hasUpdates && res.remoteCommit) {
+                            // Only notify if this is a NEW commit we haven't notified about
+                            if (res.remoteCommit !== lastNotifiedCommit) {
+                                lastNotifiedCommit = res.remoteCommit;
+                                const ownerJid = String(config.ownerNumber).replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+                                await sock.sendMessage(ownerJid, { text: `🔔 ${res.message}` });
+                            }
                         }
                     } catch {}
                 }, 5 * 60 * 1000);
