@@ -1,5 +1,5 @@
 const yts = require('yt-search');
-const ytmp3 = require('../lib/ytmp3');
+const ytmp4 = require('../lib/ytmp4');
 const fs = require('fs');
 const path = require('path');
 
@@ -7,7 +7,7 @@ const path = require('path');
 const searchSessions = new Map();
 
 /**
- * Search YouTube for songs
+ * Search YouTube for videos
  * @param {string} query - Search query
  * @param {number} limit - Number of results (default 5)
  * @returns {Promise<Array>} Search results
@@ -29,7 +29,7 @@ async function searchYouTube(query, limit = 5) {
  * @returns {string} Formatted message
  */
 function formatSearchResults(results, query) {
-    let message = '🎵 *YOUTUBE SONG SEARCH*\n\n';
+    let message = '🎬 *YOUTUBE VIDEO SEARCH*\n\n';
     message += `📝 Query: "${query}"\n`;
     message += `📊 Found ${results.length} results\n\n`;
     message += '━━━━━━━━━━━━━━━━━━━━\n\n';
@@ -43,18 +43,18 @@ function formatSearchResults(results, query) {
     });
 
     message += '━━━━━━━━━━━━━━━━━━━━\n\n';
-    message += '💡 *Reply with a number (1-5) to download that song*';
+    message += '💡 *Reply with a number (1-5) to download that video*';
 
     return message;
 }
 
 /**
- * Download YouTube audio
+ * Download YouTube video
  * @param {string} url - YouTube video URL
  * @param {string} title - Video title (for filename)
  * @returns {Promise<string>} Path to downloaded file
  */
-async function downloadAudio(url, title) {
+async function downloadVideo(url, title) {
     try {
         const downloadsDir = path.join(__dirname, '..', 'downloads');
         if (!fs.existsSync(downloadsDir)) {
@@ -67,13 +67,13 @@ async function downloadAudio(url, title) {
             .replace(/\s+/g, '_')
             .substring(0, 50);
 
-        const outputPath = path.join(downloadsDir, `${sanitizedTitle}.mp3`);
+        const outputPath = path.join(downloadsDir, `${sanitizedTitle}.mp4`);
 
-        await ytmp3(url, outputPath);
+        await ytmp4(url, outputPath);
         return outputPath;
     } catch (error) {
         console.error('Download error:', error);
-        throw new Error('Failed to download audio');
+        throw new Error('Failed to download video');
     }
 }
 
@@ -134,16 +134,16 @@ function formatViews(views) {
  * Format download progress message
  */
 function formatDownloadMessage(title) {
-    return `🎵 *DOWNLOADING SONG*\n\n` +
+    return `🎬 *DOWNLOADING VIDEO*\n\n` +
            `📝 Title: ${title}\n\n` +
-           `⏳ Please wait, downloading audio...\n` +
-           `🎧 Converting to MP3 format...`;
+           `⏳ Please wait, downloading video...\n` +
+           `📹 Quality: 360p MP4...`;
 }
 
 module.exports = {
     searchYouTube,
     formatSearchResults,
-    downloadAudio,
+    downloadVideo,
     storeSearchSession,
     getSearchSession,
     clearSearchSession,
