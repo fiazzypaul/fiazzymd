@@ -18,6 +18,7 @@ const alive = require('./features/alive');
 const ytsFeature = require('./features/yts');
 const scheduler = require('./features/scheduler');
 const jids = require('./features/jids');
+const system = require('./features/system');
 
 // Bot Configuration from .env
 const config = {
@@ -211,6 +212,63 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
         },
     });
 
+    registerCommand('uptime', 'Show bot uptime', async (sock, msg) => {
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) {
+            return await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is restricted to the bot owner.' });
+        }
+        await sock.sendMessage(msg.key.remoteJid, { text: `⏱️ Bot Uptime: ${system.getUptime()}` });
+    });
+
+    registerCommand('pm2status', 'Show PM2 management status', async (sock, msg) => {
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) {
+            return await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is restricted to the bot owner.' });
+        }
+        const managed = system.isManagedByPM2();
+        const text = managed ? `✅ Managed by PM2 (pm_id=${process.env.pm_id})` : '❌ Not managed by PM2. Use npm run pm2 to start.';
+        await sock.sendMessage(msg.key.remoteJid, { text });
+    });
+
+    registerCommand('restart', 'Restart bot', async (sock, msg) => {
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) {
+            return await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is restricted to the bot owner.' });
+        }
+        if (!system.isManagedByPM2()) {
+            return await sock.sendMessage(msg.key.remoteJid, { text: '❌ Not running under PM2. Start the bot with PM2 to enable safe restarts.' });
+        }
+        await sock.sendMessage(msg.key.remoteJid, { text: '🔄 Restarting the bot...' });
+        system.restartBot();
+    });
+
+    registerCommand('update', 'Update bot from repo and restart', async (sock, msg) => {
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) {
+            return await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is restricted to the bot owner.' });
+        }
+        if (!system.isManagedByPM2()) {
+            await sock.sendMessage(msg.key.remoteJid, { text: '⚠️ Not running under PM2. The bot will not auto-restart after update. Start with PM2 for safe updates.' });
+        }
+        await sock.sendMessage(msg.key.remoteJid, { text: '⬇️ Starting update and restart process. Please wait...' });
+        const result = await system.updateAndRestart();
+        if (!result.success || (result.message || '').includes('already up to date')) {
+            await sock.sendMessage(msg.key.remoteJid, { text: result.message });
+        }
+    });
+
     // Handle pairing code BEFORE connection events - Official Baileys approach
     if (usePairingCode && !sock.authState.creds.registered) {
         const phoneNumber = await question('\n📱 Enter your WhatsApp phone number:\n   (with country code, no + or spaces)\n   Example: 2349012345678\n\n   Number: ');
@@ -316,6 +374,18 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             // Start message scheduler
             try {
                 scheduler.startScheduler(sock);
+            } catch {}
+
+            try {
+                setInterval(async () => {
+                    try {
+                        const res = await system.checkForUpdates();
+                        if (res.hasUpdates) {
+                            const ownerJid = String(config.ownerNumber).replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+                            await sock.sendMessage(ownerJid, { text: `🔔 ${res.message}` });
+                        }
+                    } catch {}
+                }, 5 * 60 * 1000);
             } catch {}
 
             // Send welcome message after 20 seconds
@@ -465,6 +535,9 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}schedule (owner only)
 │ ${config.prefix}schedules (owner only)
 │ ${config.prefix}schedulecancel (owner only)
+│ ${config.prefix}uptime (owner only)
+│ ${config.prefix}restart (owner only)
+│ ${config.prefix}update (owner only)
 ╰──────────────────────╯
 
 ╭──────────────────────╮

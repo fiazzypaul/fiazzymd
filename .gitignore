@@ -18,3 +18,8 @@ Thumbs.db
 # Local AI tooling
 .trae/documents/
 .claude/
+ 
+# Project data folders
+database/
+downloads/
+docs/
