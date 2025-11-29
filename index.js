@@ -12,7 +12,8 @@ const imagesCF = require('./features/images_cf');
 const images = require('./features/images');
 const fancytext = require('./features/fancytext');
 const createPermissions = require('./permissions');
-const { searchSongs, downloadSong, formatSearchResults } = require('./features/songs');
+const songs = require('./features/songs');
+const ytvideo = require('./features/ytvideo');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
 const { searchAnime, getTopAnime, getSeasonalAnime, getRandomAnime, formatAnimeResults, formatAnimeDetails } = require('./features/anime');
 const presence = require('./features/presence');
@@ -82,7 +83,6 @@ const messageStore = new Map();
 const antiLinkSettings = new Map();
 const warnLimits = new Map();
 const warnCounts = new Map();
-const songSearchResults = new Map(); // Store search results for each user
 const antiDeleteChats = new Map();
 
 // Initialize auto view-once from .env
@@ -1774,69 +1774,99 @@ ${config.prefix}setvar <key> <value>
     });
 
     // Song Download Command
-    registerCommand('songs', 'Search and download songs from YouTube', async (sock, msg, args) => {
+    registerCommand('song', 'Search and download songs from YouTube', async (sock, msg, args) => {
         if (args.length === 0) {
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `🎵 *SONG DOWNLOADER*\n\n` +
-                      `*Usage:* ${config.prefix}songs <song name>\n\n` +
+                      `*Usage:* ${config.prefix}song <song name>\n\n` +
                       `*Examples:*\n` +
-                      `${config.prefix}songs smooth criminal by michael jackson\n` +
-                      `${config.prefix}songs shape of you\n` +
-                      `${config.prefix}songs bohemian rhapsody\n\n` +
+                      `${config.prefix}song smooth criminal\n` +
+                      `${config.prefix}song shape of you\n` +
+                      `${config.prefix}song bohemian rhapsody\n\n` +
                       `💡 After search, reply with a number (1-5) to download`
             });
             return;
         }
 
         const query = args.join(' ');
-        const chatId = msg.key.remoteJid;
         const userId = msg.key.participant || msg.key.remoteJid;
-        const storageKey = `${chatId}:${userId}`;
 
         try {
-            await sock.sendMessage(chatId, {
+            await sock.sendMessage(msg.key.remoteJid, {
                 text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...`
             });
 
             // Search for songs
-            const results = await searchSongs(query);
+            const results = await songs.searchYouTube(query, 5);
 
             if (!results || results.length === 0) {
-                await sock.sendMessage(chatId, {
+                await sock.sendMessage(msg.key.remoteJid, {
                     text: `❌ No songs found for: *${query}*\n\n💡 Try a different search term`
                 });
                 return;
             }
 
-            // Store search results for this user
-            console.log('💾 Storing search results:');
-            console.log('  - userId:', userId);
-            console.log('  - query:', query);
-            console.log('  - results count:', results.length);
-
-            songSearchResults.set(storageKey, {
-                results,
-                query,
-                timestamp: Date.now()
-            });
-
-            console.log('✅ Stored! Current searches:', Array.from(songSearchResults.keys()));
+            // Store search session for this user
+            songs.storeSearchSession(userId, results);
 
             // Format and send results
-            const resultsText = formatSearchResults(results, config.prefix);
-            const sentMsg = await sock.sendMessage(chatId, { text: resultsText });
-            const existing = songSearchResults.get(storageKey) || {};
-            songSearchResults.set(storageKey, {
-                results: existing.results || results,
-                query: existing.query || query,
-                timestamp: existing.timestamp || Date.now(),
-                resultMsgId: sentMsg?.key?.id || existing.resultMsgId
-            });
+            const resultsText = songs.formatSearchResults(results, query);
+            await sock.sendMessage(msg.key.remoteJid, { text: resultsText });
 
         } catch (error) {
             console.error('❌ Song search error:', error);
-            await sock.sendMessage(chatId, {
+            await sock.sendMessage(msg.key.remoteJid, {
                 text: `❌ Failed to search for songs!\n\n` +
+                      `Error: ${error.message}\n\n` +
+                      `💡 Please try again later`
+            });
+        }
+    });
+
+    // YouTube Video Download Command
+    registerCommand('ytvideo', 'Search and download videos from YouTube', async (sock, msg, args) => {
+        if (args.length === 0) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `🎬 *YOUTUBE VIDEO DOWNLOADER*\n\n` +
+                      `*Usage:* ${config.prefix}ytvideo <search query>\n\n` +
+                      `*Examples:*\n` +
+                      `${config.prefix}ytvideo funny cats\n` +
+                      `${config.prefix}ytvideo cooking tutorial\n` +
+                      `${config.prefix}ytvideo game highlights\n\n` +
+                      `💡 After search, reply with a number (1-5) to download`
+            });
+            return;
+        }
+
+        const query = args.join(' ');
+        const userId = msg.key.participant || msg.key.remoteJid;
+
+        try {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...`
+            });
+
+            // Search for videos
+            const results = await ytvideo.searchYouTube(query, 5);
+
+            if (!results || results.length === 0) {
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `❌ No videos found for: *${query}*\n\n💡 Try a different search term`
+                });
+                return;
+            }
+
+            // Store search session for this user
+            ytvideo.storeSearchSession(userId, results);
+
+            // Format and send results
+            const resultsText = ytvideo.formatSearchResults(results, query);
+            await sock.sendMessage(msg.key.remoteJid, { text: resultsText });
+
+        } catch (error) {
+            console.error('❌ Video search error:', error);
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to search for videos!\n\n` +
                       `Error: ${error.message}\n\n` +
                       `💡 Please try again later`
             });
@@ -2794,126 +2824,107 @@ ${config.prefix}setvar <key> <value>
             // Check for song download number reply (before prefix check)
             const userId = msg.key.participant || msg.key.remoteJid;
             const chatId = msg.key.remoteJid;
-            const storageKey = `${chatId}:${userId}`;
-            const quotedId = msg.message?.extendedTextMessage?.contextInfo?.stanzaId;
 
-            // Clean up old searches (older than 1 minute)
-            const now = Date.now();
-            const TTL = 5 * 60 * 1000;
-            for (const [key, data] of songSearchResults.entries()) {
-                if (now - data.timestamp > TTL) {
-                    console.log('🧹 Cleaning up old search for:', key);
-                    songSearchResults.delete(key);
-                }
-            }
+            // Check for song download reply
+            const songSession = songs.getSearchSession(userId);
+            if (songSession) {
+                const trimmed = messageText.trim();
+                const num = parseInt(trimmed);
 
-            console.log('🎵 Song Reply Check:');
-            console.log('  - userId:', userId);
-            console.log('  - messageText:', messageText);
-            console.log('  - Has pending search?', songSearchResults.has(storageKey));
-            let keyToUse = storageKey;
-            if (!songSearchResults.has(storageKey)) {
-                let latest = null;
-                for (const [k, v] of songSearchResults.entries()) {
-                    if (k.endsWith(`:${userId}`)) {
-                        if (!latest || v.timestamp > latest.timestamp) latest = { k, v };
-                    }
-                }
-                if (latest) {
-                    keyToUse = latest.k;
-                    console.log('  - Using fallback key:', keyToUse);
-                }
-                if (!latest && quotedId) {
-                    for (const [k, v] of songSearchResults.entries()) {
-                        if (k.startsWith(`${chatId}:`) && v.resultMsgId === quotedId) {
-                            keyToUse = k;
-                            console.log('  - Using quoted match key:', keyToUse);
-                            break;
-                        }
-                    }
-                }
-            }
-            if (songSearchResults.has(keyToUse)) {
-                const data = songSearchResults.get(keyToUse);
-                console.log('  - Search timestamp:', new Date(data.timestamp).toISOString());
-                console.log('  - Search age (seconds):', Math.floor((now - data.timestamp) / 1000));
-                console.log('  - Search query:', data.query);
-                console.log('  - Results count:', data.results.length);
-            }
-            console.log('  - All stored searches:', Array.from(songSearchResults.entries()).map(([k, v]) => ({ key: k, query: v.query, age: Math.floor((now - v.timestamp) / 1000) + 's' })));
+                if (!isNaN(num) && num >= 1 && num <= songSession.results.length) {
+                    const selectedVideo = songSession.results[num - 1];
 
-            if (songSearchResults.has(keyToUse)) {
-                const searchData = songSearchResults.get(keyToUse);
+                    try {
+                        // Send download message
+                        await sock.sendMessage(chatId, {
+                            text: songs.formatDownloadMessage(selectedVideo.title)
+                        });
 
-                // Check if search is still valid (less than 1 minute old)
-                if (now - searchData.timestamp > ONE_MINUTE) {
-                    console.log('  ⏰ Search expired, ignoring');
-                    songSearchResults.delete(keyToUse);
-                } else {
-                    const trimmed = messageText.trim();
-                    const match = trimmed.match(/\b([1-9][0-9]*)\b/);
-                    const num = match ? parseInt(match[1]) : NaN;
+                        // Download the audio
+                        const filePath = await songs.downloadAudio(selectedVideo.url, selectedVideo.title);
 
-                    console.log('  ✅ Found valid pending search!');
-                    console.log('  - Trimmed:', trimmed);
-                    console.log('  - Parsed num:', num);
-                    console.log('  - Valid number?', !isNaN(num) && num >= 1 && num <= searchData.results.length);
+                        // Send the audio file
+                        await sock.sendMessage(chatId, {
+                            audio: fs.readFileSync(filePath),
+                            mimetype: 'audio/mpeg',
+                            fileName: path.basename(filePath),
+                            ptt: false
+                        }, { quoted: msg });
 
-                    // Check if message is just a number between 1-5
-                    if (!isNaN(num) && num >= 1 && num <= searchData.results.length) {
-                        const selectedSong = searchData.results.find(r => r.number === num);
+                        await sock.sendMessage(chatId, {
+                            text: `✅ *Download Complete!*\n\n` +
+                                  `🎵 ${selectedVideo.title}\n` +
+                                  `👤 ${selectedVideo.author.name}`
+                        });
 
-                    if (selectedSong) {
+                        // Clean up
                         try {
-                            await sock.sendMessage(chatId, {
-                                text: `📥 *Downloading Song...*\n\n` +
-                                      `🎵 ${selectedSong.title}\n` +
-                                      `👤 ${selectedSong.artist}\n\n` +
-                                      `⏳ This may take a few moments...`
-                            });
-
-                            // Download the song
-                            const fileName = `${selectedSong.title} - ${selectedSong.artist}`;
-                            const filePath = await downloadSong(selectedSong.url, fileName);
-
-                            // Send the audio file
-                            await sock.sendMessage(chatId, {
-                                audio: fs.readFileSync(filePath),
-                                mimetype: 'audio/mpeg',
-                                fileName: `${path.basename(filePath)}`,
-                                ptt: false
-                            }, {
-                                quoted: msg
-                            });
-
-                            await sock.sendMessage(chatId, {
-                                text: `✅ *Download Complete!*\n\n` +
-                                      `🎵 ${selectedSong.title}\n` +
-                                      `👤 ${selectedSong.artist}\n` +
-                                      `⏱️ ${selectedSong.duration}`
-                            });
-
-                            // Clean up the downloaded file
-                            try {
-                                fs.unlinkSync(filePath);
-                            } catch (e) {
-                                console.error('Failed to delete temp file:', e);
-                            }
-
-                            // Clear the search results for this user
-                            songSearchResults.delete(keyToUse);
-
-                        } catch (error) {
-                            console.error('❌ Song download error:', error);
-                            await sock.sendMessage(chatId, {
-                                text: `❌ Failed to download song!\n\n` +
-                                      `Error: ${error.message}\n\n` +
-                                      `💡 Please try searching again with ${config.prefix}songs`
-                            });
+                            fs.unlinkSync(filePath);
+                        } catch (e) {
+                            console.error('Failed to delete temp file:', e);
                         }
-                        return; // Don't process as a command
+
+                        // Clear session
+                        songs.clearSearchSession(userId);
+
+                    } catch (error) {
+                        console.error('❌ Song download error:', error);
+                        await sock.sendMessage(chatId, {
+                            text: `❌ Failed to download song!\n\n` +
+                                  `Error: ${error.message}\n\n` +
+                                  `💡 Please try searching again with ${config.prefix}song`
+                        });
                     }
+                    return; // Don't process as a command
+                }
+            }
+
+            // Check for video download reply
+            const videoSession = ytvideo.getSearchSession(userId);
+            if (videoSession) {
+                const trimmed = messageText.trim();
+                const num = parseInt(trimmed);
+
+                if (!isNaN(num) && num >= 1 && num <= videoSession.results.length) {
+                    const selectedVideo = videoSession.results[num - 1];
+
+                    try {
+                        // Send download message
+                        await sock.sendMessage(chatId, {
+                            text: ytvideo.formatDownloadMessage(selectedVideo.title)
+                        });
+
+                        // Download the video
+                        const filePath = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title);
+
+                        // Send the video file
+                        await sock.sendMessage(chatId, {
+                            video: fs.readFileSync(filePath),
+                            caption: `✅ *Download Complete!*\n\n` +
+                                    `🎬 ${selectedVideo.title}\n` +
+                                    `👤 ${selectedVideo.author.name}`,
+                            mimetype: 'video/mp4'
+                        }, { quoted: msg });
+
+                        // Clean up
+                        try {
+                            fs.unlinkSync(filePath);
+                        } catch (e) {
+                            console.error('Failed to delete temp file:', e);
+                        }
+
+                        // Clear session
+                        ytvideo.clearSearchSession(userId);
+
+                    } catch (error) {
+                        console.error('❌ Video download error:', error);
+                        await sock.sendMessage(chatId, {
+                            text: `❌ Failed to download video!\n\n` +
+                                  `Error: ${error.message}\n\n` +
+                                  `💡 Please try searching again with ${config.prefix}ytvideo`
+                        });
                     }
+                    return; // Don't process as a command
                 }
             }
 
