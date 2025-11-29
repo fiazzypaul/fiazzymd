@@ -10,6 +10,7 @@ const { enableWelcome, disableWelcome, isWelcomeEnabled, sendWelcomeMessage, sen
 const gemini = require('./features/gemini');
 const imagesCF = require('./features/images_cf');
 const images = require('./features/images');
+const fancytext = require('./features/fancytext');
 const createPermissions = require('./permissions');
 const { searchSongs, downloadSong, formatSearchResults } = require('./features/songs');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
@@ -2277,6 +2278,71 @@ ${config.prefix}setvar <key> <value>
                       `• Try again in a few moments`
             });
         }
+    });
+
+    registerCommand('fancy', 'Convert text to fancy Unicode styles', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const m = msg.message || {};
+        const quotedMsg = m.extendedTextMessage?.contextInfo?.quotedMessage;
+
+        // Check if replying to a message with a style number
+        if (quotedMsg && args.length === 1) {
+            const styleNumber = parseInt(args[0]);
+
+            if (isNaN(styleNumber) || styleNumber < 1 || styleNumber > 15) {
+                await sock.sendMessage(jid, {
+                    text: `❌ Invalid style number. Please use 1-15.\n\n` +
+                          fancytext.getUsageMessage(config.prefix)
+                });
+                return;
+            }
+
+            // Get text from quoted message
+            const quotedText = quotedMsg.conversation ||
+                              quotedMsg.extendedTextMessage?.text ||
+                              '';
+
+            if (!quotedText) {
+                await sock.sendMessage(jid, {
+                    text: `❌ No text found in the quoted message.`
+                });
+                return;
+            }
+
+            const converted = fancytext.convertToStyle(quotedText, styleNumber);
+            await sock.sendMessage(jid, { text: converted });
+            return;
+        }
+
+        // Check if converting text with a specific style number
+        if (args.length >= 2) {
+            const styleNumber = parseInt(args[0]);
+
+            if (isNaN(styleNumber) || styleNumber < 1 || styleNumber > 15) {
+                // Treat first arg as text, show all styles
+                const text = args.join(' ').trim();
+                const allStyles = fancytext.generateAllStyles(text);
+                await sock.sendMessage(jid, { text: allStyles });
+                return;
+            }
+
+            // Convert with specific style
+            const text = args.slice(1).join(' ');
+            const converted = fancytext.convertToStyle(text, styleNumber);
+            await sock.sendMessage(jid, { text: converted });
+            return;
+        }
+
+        // Show all styles for single text input
+        if (args.length === 1 && isNaN(parseInt(args[0]))) {
+            const text = args[0];
+            const allStyles = fancytext.generateAllStyles(text);
+            await sock.sendMessage(jid, { text: allStyles });
+            return;
+        }
+
+        // Show usage
+        await sock.sendMessage(jid, { text: fancytext.getUsageMessage(config.prefix) });
     });
 
     registerCommand('yts', 'YouTube search results', async (sock, msg, args) => {
