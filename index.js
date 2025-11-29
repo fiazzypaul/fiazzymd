@@ -293,10 +293,14 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 
     // Handle pairing code request with proper timing
     let pairingCodeRequested = false;
+    let waitingForPairing = false;
+    let pairingTimeout = null;
+
     if (pairingPhoneNumber) {
         setTimeout(async () => {
             if (!pairingCodeRequested && !sock.authState.creds.registered) {
                 pairingCodeRequested = true;
+                waitingForPairing = true;
                 console.log('🔄 Requesting pairing code for:', pairingPhoneNumber);
                 try {
                     const code = await sock.requestPairingCode(pairingPhoneNumber);
@@ -311,7 +315,18 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
                     console.log('   3. Tap "Link a Device"');
                     console.log('   4. Tap "Link with phone number instead"');
                     console.log('   5. Enter the code above: ' + code + '\n');
-                    console.log('⏳ Waiting for authentication...\n');
+                    console.log('⏳ You have 2 minutes to enter the code...\n');
+
+                    // Set timeout for 2 minutes (120 seconds)
+                    pairingTimeout = setTimeout(() => {
+                        if (waitingForPairing && !sock.authState.creds.registered) {
+                            console.log('\n❌ Pairing timeout! Code expired after 2 minutes.');
+                            console.log('💡 Please restart the bot and try again with a fresh code.\n');
+                            rl.close();
+                            process.exit(1);
+                        }
+                    }, 120000); // 120 seconds = 2 minutes
+
                 } catch (error) {
                     console.error('❌ Failed to request pairing code:', error.message);
                     console.log('\n💡 Troubleshooting:');
@@ -342,6 +357,13 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             console.log('❌ Connection closed.');
             console.log('📊 Reason code:', statusCode);
 
+            // If waiting for pairing code, don't reconnect immediately
+            if (waitingForPairing) {
+                console.log('⏳ Still waiting for pairing code entry...');
+                console.log('💡 Please enter the pairing code in WhatsApp to continue.\n');
+                return; // Don't reconnect, just wait for user to enter code
+            }
+
             if (statusCode === DisconnectReason.loggedOut) {
                 console.log('\n❌ Logged out. Delete session folder and re-authenticate.\n');
                 rl.close();
@@ -365,6 +387,13 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
         } else if (connection === 'open') {
             // Reset reconnect attempts on successful connection
             reconnectAttempts = 0;
+
+            // Clear pairing timeout if connection successful
+            if (pairingTimeout) {
+                clearTimeout(pairingTimeout);
+                waitingForPairing = false;
+                console.log('✅ Pairing successful!\n');
+            }
 
             // Auto-detect and set owner number from bot's login
             const botOwnNumber = sock.user.id.split(':')[0];
