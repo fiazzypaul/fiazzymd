@@ -77,7 +77,22 @@ function start() {
         });
       };
       if (exists) {
-        pm2.restart('FiazzyMD', onStarted);
+        // Delete existing process and restart with new env
+        pm2.delete('FiazzyMD', (delErr) => {
+          if (delErr) {
+            console.error('❌ PM2 delete error:', delErr.message);
+            pm2.disconnect();
+            process.exit(1);
+          }
+          // Start fresh with new environment variables
+          pm2.start({
+            name: 'FiazzyMD',
+            script: 'index.js',
+            exec_mode: 'fork',
+            instances: 1,
+            env: { NODE_ENV: 'production', ...envSetup }
+          }, onStarted);
+        });
       } else {
         pm2.start({
           name: 'FiazzyMD',

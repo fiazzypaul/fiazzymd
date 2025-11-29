@@ -269,7 +269,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
         }
     });
 
-    // Handle pairing code BEFORE connection events - Official Baileys approach
+    // Store pairing info for later use (after connection is established)
+    let pairingPhoneNumber = null;
     if (usePairingCode && !sock.authState.creds.registered) {
         let cleanNumber = (process.env.PAIR_NUMBER || '').replace(/[^0-9]/g, '');
         if (!cleanNumber) {
@@ -285,30 +286,43 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
             process.exit(1);
         }
 
-        console.log('\n🔄 Requesting pairing code for:', cleanNumber);
-        try {
-            const code = await sock.requestPairingCode(cleanNumber);
-            console.log('\n╔════════════════════════════════╗');
-            console.log('║                                ║');
-            console.log(`║    📟 PAIRING CODE: ${code}     ║`);
-            console.log('║                                ║');
-            console.log('╚════════════════════════════════╝\n');
-            console.log('📌 Steps to link your device:\n');
-            console.log('   1. Open WhatsApp on your phone');
-            console.log('   2. Tap Settings → Linked Devices');
-            console.log('   3. Tap "Link a Device"');
-            console.log('   4. Tap "Link with phone number instead"');
-            console.log('   5. Enter the code above: ' + code + '\n');
-            console.log('⏳ Waiting for connection... (Bot will auto-connect)\n');
-        } catch (error) {
-            console.error('\n❌ Failed to request pairing code:', error.message);
-            console.log('\n💡 Troubleshooting:');
-            console.log('   • Verify phone number format (must include country code)');
-            console.log('   • Delete session folder if code doesn\'t match number');
-            console.log('   • Wait 10 minutes if too many attempts\n');
-            rl.close();
-            process.exit(1);
-        }
+        pairingPhoneNumber = cleanNumber;
+        console.log('🔄 Will request pairing code for:', cleanNumber);
+        console.log('⏳ Waiting for connection to be established...\n');
+    }
+
+    // Handle pairing code request with proper timing
+    let pairingCodeRequested = false;
+    if (pairingPhoneNumber) {
+        setTimeout(async () => {
+            if (!pairingCodeRequested && !sock.authState.creds.registered) {
+                pairingCodeRequested = true;
+                console.log('🔄 Requesting pairing code for:', pairingPhoneNumber);
+                try {
+                    const code = await sock.requestPairingCode(pairingPhoneNumber);
+                    console.log('\n╔════════════════════════════════╗');
+                    console.log('║                                ║');
+                    console.log(`║    📟 PAIRING CODE: ${code}     ║`);
+                    console.log('║                                ║');
+                    console.log('╚════════════════════════════════╝\n');
+                    console.log('📌 Steps to link your device:\n');
+                    console.log('   1. Open WhatsApp on your phone');
+                    console.log('   2. Tap Settings → Linked Devices');
+                    console.log('   3. Tap "Link a Device"');
+                    console.log('   4. Tap "Link with phone number instead"');
+                    console.log('   5. Enter the code above: ' + code + '\n');
+                    console.log('⏳ Waiting for authentication...\n');
+                } catch (error) {
+                    console.error('❌ Failed to request pairing code:', error.message);
+                    console.log('\n💡 Troubleshooting:');
+                    console.log('   • Verify phone number format (must include country code)');
+                    console.log('   • Delete session folder if code doesn\'t match number');
+                    console.log('   • Wait 10 minutes if too many attempts\n');
+                    rl.close();
+                    process.exit(1);
+                }
+            }
+        }, 3000); // Wait 3 seconds for connection to initialize
     }
 
     sock.ev.on('connection.update', async (update) => {
