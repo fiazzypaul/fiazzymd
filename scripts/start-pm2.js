@@ -1,47 +1,61 @@
-const { exec, spawn } = require('child_process');
-const util = require('util');
-const path = require('path');
-const execPromise = util.promisify(exec);
+const pm2 = require('pm2');
+const { spawn } = require('child_process');
 
-async function hasPM2() {
-  try {
-    await execPromise('pm2 -v');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function startWithPM2() {
-  const ecoPath = path.join(process.cwd(), 'ecosystem.config.js');
-  try {
-    await execPromise(`pm2 start "${ecoPath}" --env production`);
-  } catch (e) {
-    try {
-      await execPromise('pm2 restart FiazzyMD');
-    } catch (e2) {
-      throw e2;
+function streamLogsViaBus() {
+  pm2.launchBus((busErr, bus) => {
+    if (busErr) {
+      const child = spawn('npx', ['pm2', 'logs', 'FiazzyMD'], { stdio: 'inherit', shell: true });
+      child.on('exit', (code) => process.exit(code ?? 0));
+      return;
     }
-  }
-  try { await execPromise('pm2 save'); } catch {}
+    console.log('📜 Streaming logs');
+    bus.on('log:out', (packet) => {
+      if (packet.process.name === 'FiazzyMD') process.stdout.write(packet.data);
+    });
+    bus.on('log:err', (packet) => {
+      if (packet.process.name === 'FiazzyMD') process.stderr.write(packet.data);
+    });
+  });
 }
 
-async function main() {
+function start() {
   console.log('🔧 Ensuring PM2 is available...');
-  if (!(await hasPM2())) {
-    console.error('❌ PM2 is not installed. Install it with: npm i -g pm2');
-    process.exit(1);
-  }
-
-  console.log('🚀 Starting FiazzyMD with PM2 (env=production)...');
-  await startWithPM2();
-
-  console.log('📜 Streaming logs (Ctrl+C to detach logs, app keeps running under PM2)');
-  const child = spawn('pm2', ['logs', 'FiazzyMD'], { stdio: 'inherit', shell: true });
-  child.on('exit', (code) => process.exit(code ?? 0));
+  pm2.connect((err) => {
+    if (err) {
+      console.error('❌ PM2 connect error:', err.message);
+      process.exit(1);
+    }
+    console.log('🚀 Starting FiazzyMD with PM2 (env=production)...');
+    pm2.list((listErr, list) => {
+      if (listErr) {
+        console.error('❌ PM2 list error:', listErr.message);
+        pm2.disconnect();
+        process.exit(1);
+      }
+      const exists = Array.isArray(list) && list.some((p) => p.name === 'FiazzyMD');
+      const onStarted = (errStart) => {
+        if (errStart) {
+          console.error('❌ PM2 start/restart error:', errStart.message);
+          pm2.disconnect();
+          process.exit(1);
+        }
+        pm2.dump(() => {
+          streamLogsViaBus();
+        });
+      };
+      if (exists) {
+        pm2.restart('FiazzyMD', onStarted);
+      } else {
+        pm2.start({
+          name: 'FiazzyMD',
+          script: 'index.js',
+          exec_mode: 'fork',
+          instances: 1,
+          env: { NODE_ENV: 'production' }
+        }, onStarted);
+      }
+    });
+  });
 }
 
-main().catch((e) => {
-  console.error('❌ Failed to start via PM2:', e.message);
-  process.exit(1);
-});
+start();
