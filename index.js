@@ -22,6 +22,7 @@ const ytsFeature = require('./features/yts');
 const scheduler = require('./features/scheduler');
 const jids = require('./features/jids');
 const system = require('./features/system');
+const registerGroupCommands = require('./features/group');
 
 // Bot Configuration from .env
 const config = {
@@ -528,6 +529,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╰──────────────────────╯
 │ ${config.prefix}add
 │ ${config.prefix}kick
+│ ${config.prefix}kickall
 │ ${config.prefix}promote
 │ ${config.prefix}demote
 │ ${config.prefix}tag
@@ -536,6 +538,13 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}unmute
 │ ${config.prefix}warn
 │ ${config.prefix}resetwarn
+│ ${config.prefix}warnlimit
+│ ${config.prefix}antilink
+│ ${config.prefix}welcome
+│ ${config.prefix}invite
+│ ${config.prefix}revoke
+│ ${config.prefix}join
+│ ${config.prefix}ginfo
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -552,7 +561,6 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}img
 │ ${config.prefix}getjid
 │ ${config.prefix}savejid
-│ ${config.prefix}welcome (owner/admin only)
 │ ${config.prefix}gemini
 │ ${config.prefix}alive
 │ ${config.prefix}wapresence (owner only)
@@ -590,8 +598,6 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}setvar - Set any var
 │ ${config.prefix}autoviewonce - Auto view-once
 │ ${config.prefix}antidelete - Anti-delete (owner only)
-│ ${config.prefix}warnlimit - Warn limit
-│ ${config.prefix}antilink - Anti-link
 │ ${config.prefix}wapresence (owner only)
 ╰──────────────────────╯
 
@@ -636,481 +642,19 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         }
     });
 
-    // Group Commands
-    registerCommand('add', 'Add a member to the group', async (sock, msg, args) => {
-        if (!isGroup(msg.key.remoteJid)) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is only for groups!'
-            });
-        }
+    // Group Commands (moved to features/group.js)
 
-        // Robust owner detection (handles LIDs and self messages)
-        const senderJid = msg.key.participant || msg.key.remoteJid;
-        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
-        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
-        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+    // kick moved to features/group.js
 
-        // Check if user is admin (owner can bypass in any mode)
-        if (!isOwner) {
-            if (config.botMode === 'private') {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ This command is restricted to bot owner in private mode!'
-                });
-            }
+    // kickall moved to features/group.js
 
-            if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant))) {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ Only admins can use this command!'
-                });
-            }
-        }
+    // promote moved to features/group.js
 
-        if (args.length === 0) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: `📖 *How to use ${config.prefix}add*\n\n` +
-                      `*Description:* Add a member to the group\n\n` +
-                      `*Usage:* ${config.prefix}add <number>\n\n` +
-                      `*Example:*\n${config.prefix}add 2349012345678\n\n` +
-                      `💡 Include country code without + or spaces`
-            });
-        }
+    // demote moved to features/group.js
 
-        const number = args[0].replace(/[^0-9]/g, '');
-        if (!number) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Please provide a valid phone number!\n\n` +
-                      `*Example:* ${config.prefix}add 2349012345678`
-            });
-        }
+    // tag moved to features/group.js
 
-        try {
-            const userJid = `${number}@s.whatsapp.net`;
-            const result = await sock.groupParticipantsUpdate(msg.key.remoteJid, [userJid], 'add');
-            console.log('📊 Add result:', JSON.stringify(result, null, 2));
-
-            // Check if result exists and is valid
-            if (!result || result.length === 0) {
-                console.error('❌ Invalid result from groupParticipantsUpdate');
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `❌ Failed to add +${number}: No response from WhatsApp`
-                });
-                return;
-            }
-
-            // Check if the add was successful
-            // Result format: [{ status: 200 }] for success
-            // or [{ status: 403 }] for privacy blocked
-            const userResult = result[0];
-            const statusCode = parseInt(userResult.status) || userResult.status;
-
-            console.log('📊 Status code:', statusCode, 'Type:', typeof statusCode);
-
-            if (statusCode === 200 || statusCode === '200') {
-                // Successfully added
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `✅ Successfully added @${number.split('@')[0]} to the group!`,
-                    mentions: [userJid]
-                });
-            } else if (statusCode === 403 || statusCode === '403') {
-                // User privacy blocked - send invite link
-                console.log('⚠️  User privacy blocked. Attempting to use user-specific invite code...');
-                console.log('📊 Full userResult:', JSON.stringify(userResult, null, 2));
-
-                try {
-                    // Extract the user-specific invite code from the add_request response
-                    // This is NOT the main group invite link - it's a temporary 3-day invite for this specific user
-                    const addRequest = userResult.content?.content?.find(item => item.tag === 'add_request');
-                    const userSpecificCode = addRequest?.attrs?.code;
-                    const inviteExpiration = addRequest?.attrs?.expiration;
-
-                    console.log('🔍 Add request data:', {
-                        addRequest,
-                        userSpecificCode,
-                        inviteExpiration
-                    });
-
-                    if (!userSpecificCode) {
-                        console.error('❌ No user-specific invite code found in response');
-                        await sock.sendMessage(msg.key.remoteJid, {
-                            text: `⚠️ Could not add @${number} due to privacy settings.\n\n` +
-                                  `❌ Failed to generate invite: No invite code in response`,
-                            mentions: [userJid]
-                        });
-                        return;
-                    }
-
-                    // Use the user-specific invite code (NOT the main group invite)
-                    const inviteCode = userSpecificCode;
-                    const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
-                    console.log('✅ Using user-specific invite code:', inviteCode);
-                    console.log('🔗 Invite link:', inviteLink);
-                    console.log('⏰ Expiration:', inviteExpiration ? new Date(parseInt(inviteExpiration) * 1000).toISOString() : 'unknown');
-
-                    // Get group metadata for the invite card
-                    const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
-                    const groupName = groupMetadata.subject;
-
-                    // Try to get group icon
-                    let groupIconBuffer = null;
-                    try {
-                        const groupIconUrl = await sock.profilePictureUrl(msg.key.remoteJid, 'image');
-                        if (groupIconUrl) {
-                            const response = await fetch(groupIconUrl);
-                            const arrayBuffer = await response.arrayBuffer();
-                            groupIconBuffer = Buffer.from(arrayBuffer);
-                        }
-                    } catch (iconError) {
-                        console.log('⚠️  Could not fetch group icon:', iconError.message);
-                    }
-
-                    // Build the group invite message using Baileys format
-                    // Baileys expects 'groupInvite' key with specific field names
-                    await sock.sendMessage(userJid, {
-                        groupInvite: {
-                            inviteCode: inviteCode,                          // User-specific invite code
-                            inviteExpiration: parseInt(inviteExpiration),    // Expiration timestamp (as number)
-                            text: 'Invitation to join my WhatsApp group',   // Caption text
-                            jid: msg.key.remoteJid,                          // Group JID
-                            subject: groupName                                // Group name
-                        }
-                    });
-
-                    console.log('✅ Sent official group invite card to user');
-
-                    // Notify in group with mention
-                    await sock.sendMessage(msg.key.remoteJid, {
-                        text: `⚠️ Could not add @${number} due to privacy settings.\n` +
-                              `📨 An official group invite has been sent to the user.`,
-                        mentions: [userJid]
-                    });
-                } catch (inviteError) {
-                    console.error('❌ Failed to generate/send invite:', inviteError);
-                    await sock.sendMessage(msg.key.remoteJid, {
-                        text: `⚠️ Could not add @${number} due to privacy settings.\n\n` +
-                              `❌ Failed to send invite: ${inviteError.message}\n` +
-                              `💡 Make sure bot is a group admin to generate invite links.`,
-                        mentions: [userJid]
-                    });
-                }
-            } else {
-                // Other error status
-                console.log('⚠️  Unexpected status:', statusCode);
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `❌ Failed to add +${number} (Error code: ${statusCode})`
-                });
-            }
-        } catch (error) {
-            console.error('❌ Error in add command:', error);
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to add member: ${error.message}`
-            });
-        }
-    });
-
-    registerCommand('kick', 'Remove a member from the group', async (sock, msg, args) => {
-        if (!isGroup(msg.key.remoteJid)) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is only for groups!'
-            });
-        }
-
-        // Robust owner detection (handles LIDs and self messages)
-        const senderJid = msg.key.participant || msg.key.remoteJid;
-        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
-        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
-        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
-
-        // Check if user is admin (owner can bypass in any mode)
-        if (!isOwner) {
-            if (config.botMode === 'private') {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ This command is restricted to bot owner in private mode!'
-                });
-            }
-
-            if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant))) {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ Only admins can use this command!'
-                });
-            }
-        }
-
-        let targetJid;
-
-        // Check if replying to a message
-        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
-            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
-        } else if (args.length > 0) {
-            const number = args[0].replace(/[^0-9]/g, '');
-            targetJid = `${number}@s.whatsapp.net`;
-        } else {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: `📖 *How to use ${config.prefix}kick*\n\n` +
-                      `*Description:* Remove a member from the group\n\n` +
-                      `*Usage:*\n` +
-                      `• Reply to their message with ${config.prefix}kick\n` +
-                      `• Or use ${config.prefix}kick <number>\n\n` +
-                      `*Examples:*\n` +
-                      `1. Reply to someone's message: ${config.prefix}kick\n` +
-                      `2. ${config.prefix}kick 2349012345678`
-            });
-        }
-
-        try {
-            await sock.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'remove');
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `✅ Successfully removed @${targetJid.split('@')[0]} from the group!`,
-                mentions: [targetJid]
-            });
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to remove member: ${error.message}`
-            });
-        }
-    });
-
-    registerCommand('kickall', 'Remove all members from the group', async (sock, msg) => {
-        if (!isGroup(msg.key.remoteJid)) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is only for groups!'
-            });
-        }
-
-        // Robust owner detection (handles LIDs and self messages)
-        const senderJid = msg.key.participant || msg.key.remoteJid;
-        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
-        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
-        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
-
-        // Check if user is admin (owner can bypass in any mode)
-        if (!isOwner) {
-            if (config.botMode === 'private') {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ This command is restricted to bot owner in private mode!'
-                });
-            }
-
-            if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant))) {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ Only admins can use this command!'
-                });
-            }
-        }
-
-        try {
-            // Get group metadata
-            const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
-            const participants = groupMetadata.participants;
-
-            // Get bot's JID
-            const botJid = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-
-            // Filter out admins and the bot itself
-            const membersToKick = participants
-                .filter(p => !p.admin && p.id !== botJid)
-                .map(p => p.id);
-
-            if (membersToKick.length === 0) {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ No members to remove! (Only non-admin members can be removed)'
-                });
-            }
-
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `⏳ Removing ${membersToKick.length} members from the group...`
-            });
-
-            // Remove all members
-            await sock.groupParticipantsUpdate(msg.key.remoteJid, membersToKick, 'remove');
-
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `✅ Successfully removed ${membersToKick.length} members from the group!`
-            });
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to remove members: ${error.message}`
-            });
-        }
-    });
-
-    registerCommand('promote', 'Promote a member to admin', async (sock, msg, args) => {
-        if (!isGroup(msg.key.remoteJid)) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is only for groups!'
-            });
-        }
-
-        // Robust owner detection (handles LIDs and self messages)
-        const senderJid = msg.key.participant || msg.key.remoteJid;
-        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
-        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
-        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
-
-        // Check if user is admin (owner can bypass in any mode)
-        if (!isOwner) {
-            if (config.botMode === 'private') {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ This command is restricted to bot owner in private mode!'
-                });
-            }
-
-            if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant))) {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ Only admins can use this command!'
-                });
-            }
-        }
-
-        let targetJid;
-
-        // Check if replying to a message
-        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
-            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
-        } else if (args.length > 0) {
-            const number = args[0].replace(/[^0-9]/g, '');
-            targetJid = `${number}@s.whatsapp.net`;
-        } else {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: `📖 *How to use ${config.prefix}promote*\n\n` +
-                      `*Description:* Promote a member to admin\n\n` +
-                      `*Usage:*\n` +
-                      `• Reply to their message with ${config.prefix}promote\n` +
-                      `• Or use ${config.prefix}promote <number>\n\n` +
-                      `*Examples:*\n` +
-                      `1. Reply to someone's message: ${config.prefix}promote\n` +
-                      `2. ${config.prefix}promote 2349012345678`
-            });
-        }
-
-        try {
-            await sock.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'promote');
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `✅ Successfully promoted @${targetJid.split('@')[0]} to admin!`,
-                mentions: [targetJid]
-            });
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to promote member: ${error.message}`
-            });
-        }
-    });
-
-    registerCommand('demote', 'Demote an admin to member', async (sock, msg, args) => {
-        if (!isGroup(msg.key.remoteJid)) {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: '❌ This command is only for groups!'
-            });
-        }
-
-        // Robust owner detection (handles LIDs and self messages)
-        const senderJid = msg.key.participant || msg.key.remoteJid;
-        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
-        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
-        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
-
-        // Check if user is admin (owner can bypass in any mode)
-        if (!isOwner) {
-            if (config.botMode === 'private') {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ This command is restricted to bot owner in private mode!'
-                });
-            }
-
-            if (!(await isUserAdmin(sock, msg.key.remoteJid, msg.key.participant))) {
-                return await sock.sendMessage(msg.key.remoteJid, {
-                    text: '❌ Only admins can use this command!'
-                });
-            }
-        }
-
-        let targetJid;
-
-        // Check if replying to a message
-        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
-            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
-        } else if (args.length > 0) {
-            const number = args[0].replace(/[^0-9]/g, '');
-            targetJid = `${number}@s.whatsapp.net`;
-        } else {
-            return await sock.sendMessage(msg.key.remoteJid, {
-                text: `📖 *How to use ${config.prefix}demote*\n\n` +
-                      `*Description:* Demote an admin to member\n\n` +
-                      `*Usage:*\n` +
-                      `• Reply to their message with ${config.prefix}demote\n` +
-                      `• Or use ${config.prefix}demote <number>\n\n` +
-                      `*Examples:*\n` +
-                      `1. Reply to someone's message: ${config.prefix}demote\n` +
-                      `2. ${config.prefix}demote 2349012345678`
-            });
-        }
-
-        try {
-            await sock.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'demote');
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `✅ Successfully demoted @${targetJid.split('@')[0]} to member!`,
-                mentions: [targetJid]
-            });
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to demote member: ${error.message}`
-            });
-        }
-    });
-
-    registerCommand('tag', 'Tag all members with a message', async (sock, msg, args) => {
-        let tagMessage = args.join(' ');
-
-        // Check if replying to a message
-        if (!tagMessage && msg.message?.extendedTextMessage?.contextInfo?.quotedMessage) {
-            const quotedText = msg.message.extendedTextMessage.contextInfo.quotedMessage.conversation ||
-                              msg.message.extendedTextMessage.contextInfo.quotedMessage.extendedTextMessage?.text;
-            tagMessage = quotedText || 'Tagged by admin';
-        }
-
-        if (!tagMessage) {
-            tagMessage = 'Tagged by admin';
-        }
-
-        try {
-            const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
-            const participants = groupMetadata.participants.map(p => p.id);
-
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `📢 *${tagMessage}*`,
-                mentions: participants
-            });
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to tag members: ${error.message}`
-            });
-        }
-    });
-
-    registerCommand('tagall', 'List all members with tags', async (sock, msg) => {
-        try {
-            const groupMetadata = await sock.groupMetadata(msg.key.remoteJid);
-            const participants = groupMetadata.participants;
-
-            let text = `╭─────────────────────╮\n`;
-            text += `│  👥 *GROUP MEMBERS*  │\n`;
-            text += `╰─────────────────────╯\n\n`;
-
-            participants.forEach((participant, index) => {
-                text += `${index + 1}. @${participant.id.split('@')[0]}\n`;
-            });
-
-            text += `\n*Total Members:* ${participants.length}`;
-
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: text,
-                mentions: participants.map(p => p.id)
-            });
-        } catch (error) {
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to list members: ${error.message}`
-            });
-        }
-    });
+    // tagall moved to features/group.js
 
     const unwrapViewOnce = (m) => {
         if (!m) {
@@ -1346,37 +890,7 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         if (handler) return handler(sock, msg, args);
     });
 
-    registerCommand('welcome', 'Enable/disable/set welcome messages (group only)', async (sock, msg, args) => {
-        const chatId = msg.key.remoteJid;
-        if (!Permissions.isGroup(chatId)) {
-            await sock.sendMessage(chatId, { text: '❌ This command only works in groups' });
-            return;
-        }
-        const sub = (args[0] || '').toLowerCase();
-        if (sub === 'on') {
-            enableWelcome(chatId);
-            await sock.sendMessage(chatId, { text: '✅ Welcome system enabled in this group!' });
-        } else if (sub === 'off') {
-            disableWelcome(chatId);
-            await sock.sendMessage(chatId, { text: '❌ Welcome system disabled.' });
-        } else if (sub === 'set') {
-            const text = args.slice(1).join(' ').trim();
-            if (!text) {
-                await sock.sendMessage(chatId, { text: `❌ Provide a message.\n\nCorrect format:\n${config.prefix}welcome set Welcome to {group}, @user 👋` });
-                return;
-            }
-            const { setWelcomeMessage, validateWelcomeTemplate } = require('./features/welcome');
-            const v = validateWelcomeTemplate(text);
-            if (!v.valid) {
-                await sock.sendMessage(chatId, { text: `❌ ${v.reason}\n\nCorrect format:\n${config.prefix}welcome set Welcome to {group}, @user 👋` });
-                return;
-            }
-            setWelcomeMessage(chatId, text);
-            await sock.sendMessage(chatId, { text: '✅ Custom welcome message saved for this group!' });
-        } else {
-            await sock.sendMessage(chatId, { text: `Usage:\n${config.prefix}welcome on\n${config.prefix}welcome off\n${config.prefix}welcome set <message with @user and {group}>` });
-        }
-    });
+    // welcome moved to features/group.js
 
     registerCommand('antidelete', 'Toggle anti-delete globally (saved in .env)', async (sock, msg, args) => {
         const arg = (args[0] || '').toLowerCase();
@@ -1806,8 +1320,9 @@ ${config.prefix}setvar <key> <value>
                 return;
             }
 
-            // Store search session for this user
-            songs.storeSearchSession(userId, results);
+            const chatIdStore = msg.key.remoteJid;
+            const storageKeySong = `${chatIdStore}:${userId}`;
+            songs.storeSearchSession(storageKeySong, results);
 
             // Format and send results
             const resultsText = songs.formatSearchResults(results, query);
@@ -1821,6 +1336,11 @@ ${config.prefix}setvar <key> <value>
                       `💡 Please try again later`
             });
         }
+    });
+
+    registerCommand('songs', 'Alias for song', async (sock, msg, args) => {
+        const h = commands.get('song');
+        if (h && h.handler) return h.handler(sock, msg, args);
     });
 
     // YouTube Video Download Command
@@ -1856,8 +1376,8 @@ ${config.prefix}setvar <key> <value>
                 return;
             }
 
-            // Store search session for this user
-            ytvideo.storeSearchSession(userId, results);
+            const storageKeyVid = `${msg.key.remoteJid}:${userId}`;
+            ytvideo.storeSearchSession(storageKeyVid, results);
 
             // Format and send results
             const resultsText = ytvideo.formatSearchResults(results, query);
@@ -1873,7 +1393,8 @@ ${config.prefix}setvar <key> <value>
         }
     });
 
-    registerCommand('mute', 'Mute the group', async (sock, msg, args) => {
+    /* moved to features/group.js */
+    /* registerCommand('mute', 'Mute the group', async (sock, msg, args) => {
         if (!isGroup(msg.key.remoteJid)) {
             return await sock.sendMessage(msg.key.remoteJid, {
                 text: '❌ This command is only for groups!'
@@ -1957,9 +1478,10 @@ ${config.prefix}setvar <key> <value>
                 text: `❌ Failed to mute group: ${error.message}`
             });
         }
-    });
+    }); */
 
-    registerCommand('unmute', 'Unmute the group', async (sock, msg) => {
+    /* moved to features/group.js */
+    /* registerCommand('unmute', 'Unmute the group', async (sock, msg) => {
         if (!isGroup(msg.key.remoteJid)) {
             return await sock.sendMessage(msg.key.remoteJid, {
                 text: '❌ This command is only for groups!'
@@ -2005,9 +1527,10 @@ ${config.prefix}setvar <key> <value>
                 text: `❌ Failed to unmute group: ${error.message}`
             });
         }
-    });
+    }); */
 
-    registerCommand('warn', 'Warn a user in the group', async (sock, msg, args) => {
+    /* moved to features/group.js */
+    /* registerCommand('warn', 'Warn a user in the group', async (sock, msg, args) => {
         if (!Permissions.isGroup(msg.key.remoteJid)) {
             await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
             return;
@@ -2040,9 +1563,10 @@ ${config.prefix}setvar <key> <value>
         } else {
             await sock.sendMessage(msg.key.remoteJid, { text: `⚠️ Warned @${targetJid.split('@')[0]} (${c}/${limit})`, mentions: [targetJid] });
         }
-    });
+    }); */
 
-    registerCommand('resetwarn', 'Reset warnings for a user', async (sock, msg, args) => {
+    /* moved to features/group.js */
+    /* registerCommand('resetwarn', 'Reset warnings for a user', async (sock, msg, args) => {
         if (!Permissions.isGroup(msg.key.remoteJid)) {
             await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
             return;
@@ -2068,7 +1592,7 @@ ${config.prefix}setvar <key> <value>
             text: `✅ Reset warnings for @${targetJid.split('@')[0]} (had ${prevCount} warnings)`,
             mentions: [targetJid]
         });
-    });
+    }); */
 
     registerCommand('ping', 'Check bot response time', async (sock, msg) => {
         const start = Date.now();
@@ -2583,7 +2107,8 @@ ${config.prefix}setvar <key> <value>
         }
     });
 
-    registerCommand('warnlimit', 'Set warn limit for this group', async (sock, msg, args) => {
+    /* moved to features/group.js */
+    /* registerCommand('warnlimit', 'Set warn limit for this group', async (sock, msg, args) => {
         if (!Permissions.isGroup(msg.key.remoteJid)) {
             await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
             return;
@@ -2600,9 +2125,10 @@ ${config.prefix}setvar <key> <value>
         }
         warnLimits.set(msg.key.remoteJid, n);
         await sock.sendMessage(msg.key.remoteJid, { text: `✅ Warn limit set to ${n}` });
-    });
+    }); */
 
-    registerCommand('antilink', 'Toggle anti-link for this chat', async (sock, msg, args) => {
+    /* moved to features/group.js */
+    /* registerCommand('antilink', 'Toggle anti-link for this chat', async (sock, msg, args) => {
         if (!Permissions.isGroup(msg.key.remoteJid)) {
             await sock.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' });
             return;
@@ -2622,7 +2148,7 @@ ${config.prefix}setvar <key> <value>
         } else {
             await sock.sendMessage(msg.key.remoteJid, { text: `📊 Anti-link is ${current.enabled ? 'ON' : 'OFF'} (${current.action})\n\nUse ${config.prefix}antilink on [warn|kick] or ${config.prefix}antilink off` });
         }
-    });
+    }); */
 
     // Universal message text extractor (handles all WhatsApp message types)
     function extractMessageText(message) {
@@ -2826,7 +2352,8 @@ ${config.prefix}setvar <key> <value>
             const chatId = msg.key.remoteJid;
 
             // Check for song download reply
-            const songSession = songs.getSearchSession(userId);
+            const storageKeySongReply = `${chatId}:${userId}`;
+            const songSession = songs.getSearchSession(storageKeySongReply);
             if (songSession) {
                 const trimmed = messageText.trim();
                 const num = parseInt(trimmed);
@@ -2865,7 +2392,7 @@ ${config.prefix}setvar <key> <value>
                         }
 
                         // Clear session
-                        songs.clearSearchSession(userId);
+                        songs.clearSearchSession(storageKeySongReply);
 
                     } catch (error) {
                         console.error('❌ Song download error:', error);
@@ -2879,8 +2406,15 @@ ${config.prefix}setvar <key> <value>
                 }
             }
 
+            const isPlainNumber = /^\d+$/.test(messageText.trim());
+            if (isPlainNumber && !messageText.startsWith(config.prefix)) {
+                await sock.sendMessage(chatId, { text: 'ℹ️ No active selection.\n\nUse ' + config.prefix + 'song <query> or ' + config.prefix + 'ytvideo <query> and then reply with a number.' });
+                return;
+            }
+
             // Check for video download reply
-            const videoSession = ytvideo.getSearchSession(userId);
+            const storageKeyVidReply = `${chatId}:${userId}`;
+            const videoSession = ytvideo.getSearchSession(storageKeyVidReply);
             if (videoSession) {
                 const trimmed = messageText.trim();
                 const num = parseInt(trimmed);
@@ -2914,7 +2448,7 @@ ${config.prefix}setvar <key> <value>
                         }
 
                         // Clear session
-                        ytvideo.clearSearchSession(userId);
+                        ytvideo.clearSearchSession(storageKeyVidReply);
 
                     } catch (error) {
                         console.error('❌ Video download error:', error);
@@ -3046,6 +2580,14 @@ ${config.prefix}setvar <key> <value>
             console.error('❌ Anti-delete update error:', e);
         }
     });
+
+    // Register group commands
+    try { 
+      registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings }); 
+    }
+    catch (e) { 
+      console.error('❌ Failed to register group commands:', e && e.message ? e.message : e); 
+    }
 
     return sock;
 }
