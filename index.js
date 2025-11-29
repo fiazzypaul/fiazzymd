@@ -9,6 +9,7 @@ const { createStickerBuffer } = require('./features/sticker');
 const { enableWelcome, disableWelcome, isWelcomeEnabled, sendWelcomeMessage, sendGoodbyeMessage } = require('./features/welcome');
 const gemini = require('./features/gemini');
 const imagesCF = require('./features/images_cf');
+const images = require('./features/images');
 const createPermissions = require('./permissions');
 const { searchSongs, downloadSong, formatSearchResults } = require('./features/songs');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
@@ -2187,6 +2188,94 @@ ${config.prefix}setvar <key> <value>
             } else {
                 await sock.sendMessage(jid, { text: `❌ ${err}` });
             }
+        }
+    });
+
+    registerCommand('image', 'Search and download images from Google', async (sock, msg, args) => {
+        const query = args.join(' ').trim();
+        const jid = msg.key.remoteJid;
+
+        if (!query) {
+            await sock.sendMessage(jid, {
+                text: `💡 *Usage:* ${config.prefix}image <search query>\n\n` +
+                      `*Examples:*\n` +
+                      `${config.prefix}image sunset beach\n` +
+                      `${config.prefix}image cute cats\n` +
+                      `${config.prefix}image sports cars\n\n` +
+                      `📊 Downloads up to 5 images by default.`
+            });
+            return;
+        }
+
+        // Send searching message
+        const searchMsg = images.formatSearchMessage(query, 5);
+        await sock.sendMessage(jid, { text: searchMsg });
+
+        try {
+            // Set composing presence
+            try { await sock.sendPresenceUpdate('composing', jid); } catch {}
+
+            // Search for images
+            const imageUrls = await images.searchImages(query, 5);
+
+            if (!imageUrls || imageUrls.length === 0) {
+                await sock.sendMessage(jid, {
+                    text: `❌ No images found for "${query}"\n\n` +
+                          `💡 Try a different search term.`
+                });
+                return;
+            }
+
+            // Download images
+            const downloadedPaths = await images.downloadImages(imageUrls, query);
+
+            if (downloadedPaths.length === 0) {
+                await sock.sendMessage(jid, {
+                    text: `❌ Failed to download images for "${query}"\n\n` +
+                          `💡 Please try again later.`
+                });
+                return;
+            }
+
+            // Send all downloaded images
+            try { await sock.sendPresenceUpdate('composing', jid); } catch {}
+
+            for (let i = 0; i < downloadedPaths.length; i++) {
+                const imagePath = downloadedPaths[i];
+                const imageBuffer = fs.readFileSync(imagePath);
+
+                const caption = i === 0
+                    ? `🖼️ *Image ${i + 1}/${downloadedPaths.length}*\n\n📝 Query: "${query}"\n\n💡 Powered by Fiazzy-MD`
+                    : `🖼️ *Image ${i + 1}/${downloadedPaths.length}*`;
+
+                await sock.sendMessage(jid, {
+                    image: imageBuffer,
+                    caption
+                });
+
+                // Cleanup: delete the downloaded file
+                try {
+                    fs.unlinkSync(imagePath);
+                } catch {}
+
+                // Small delay between images
+                if (i < downloadedPaths.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+
+            // Set paused presence
+            try { await sock.sendPresenceUpdate('paused', jid); } catch {}
+
+        } catch (error) {
+            console.error('❌ Image search error:', error);
+            await sock.sendMessage(jid, {
+                text: `❌ Failed to search for images: ${error.message}\n\n` +
+                      `💡 Tips:\n` +
+                      `• Try a simpler search term\n` +
+                      `• Check your internet connection\n` +
+                      `• Try again in a few moments`
+            });
         }
     });
 
