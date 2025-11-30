@@ -43,55 +43,177 @@ module.exports = function registerGroupCommands(params) {
     try {
       const res = await sockInst.groupParticipantsUpdate(msg.key.remoteJid, [userJid], 'add');
       const status = res?.[0]?.status;
+      
+      // Debug logging for privacy blocked responses
+      console.log('📋 groupParticipantsUpdate response:', JSON.stringify(res, null, 2));
+      console.log('🔍 Status:', status);
+      console.log('🔍 Full response object:', res);
       if (String(status) === '200') {
         await sockInst.sendMessage(msg.key.remoteJid, { text: `✅ Added @${number}`, mentions: [userJid] });
       } else if (String(status) === '403') {
-        // Privacy blocked - generate regular group invite link
+        // Privacy blocked - extract user-specific invite code from response
         try {
-          console.log('⚠️ User privacy blocked. Generating regular group invite link...');
+          console.log('⚠️ User privacy blocked. Extracting user-specific invite code...');
           
-          // Generate regular group invite code (not the add_request code)
-          const inviteCode = await sockInst.groupInviteCode(msg.key.remoteJid);
-          console.log('Generated invite code from groupInviteCode():', inviteCode);
+          // Extract the user-specific invite code from the response
+          // The response structure shows add_request is nested in content.content[0]
+          const content = res?.[0]?.content;
+          const addRequest = content?.content?.[0]; // add_request is the first item in content array
+          const inviteCode = addRequest?.attrs?.code;
+          const expiration = addRequest?.attrs?.expiration;
           
-          // Get group metadata for better messaging
+          console.log('📋 Extracted content:', content);
+          console.log('📋 Extracted addRequest:', addRequest);
+          console.log('🔑 Invite code:', inviteCode);
+          console.log('📅 Expiration:', expiration);
+          
+          if (!inviteCode) {
+            console.log('❌ No user-specific invite code found in response, falling back to regular group invite...');
+            // Fallback to regular group invite if no user-specific code
+            const fallbackCode = await sockInst.groupInviteCode(msg.key.remoteJid);
+            const inviteLink = `https://chat.whatsapp.com/${fallbackCode}`;
+            
+            await sockInst.sendMessage(userJid, {
+              text: `📨 *GROUP INVITATION*
+
+⚠️ Cannot add you directly due to your privacy settings
+
+🔗 *Click here to join:*
+${inviteLink}
+
+⏰ *Expires in:* 3 days`
+            });
+            
+            await sockInst.sendMessage(msg.key.remoteJid, {
+              text: `⚠️ Could not add @${number} due to privacy settings. Sent fallback invite link.`,
+              mentions: [userJid]
+            });
+            return;
+          }
+          
+          console.log('✅ Found user-specific invite code:', inviteCode);
+          console.log('📅 Expiration timestamp:', expiration);
+          
+          // Get group metadata for the invite message
           let groupName = 'the group';
+          let groupDesc = '';
           try {
             const groupMeta = await sockInst.groupMetadata(msg.key.remoteJid);
             groupName = groupMeta.subject || 'the group';
+            groupDesc = groupMeta.desc || '';
           } catch (e) {
-            // Use default name if metadata fetch fails
+            // Use defaults if metadata fetch fails
           }
           
-          // Send proper WhatsApp invite link with enhanced formatting
-          const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
-          console.log('Generated invite link:', inviteLink);
+          // Create proper group invite message structure
+          // Send groupInviteMessage directly as the message content
+          const inviteMessage = {
+            groupJid: msg.key.remoteJid,
+            inviteCode: inviteCode,
+            inviteExpiration: expiration || Math.floor(Date.now() / 1000) + (3 * 24 * 60 * 60), // 3 days default
+            groupName: groupName,
+            caption: `📨 You are invited to join ${groupName}`
+            // Remove jpegThumbnail field to avoid media type issues
+          };
           
-          await sockInst.sendMessage(userJid, {
-            text: `⚠️ *Cannot add you directly due to your privacy settings*
+          console.log('📤 Creating invite message:', JSON.stringify(inviteMessage, null, 2));
+          console.log('📤 Sending user-specific invite card...');
+          
+          // Send the invite card to the user using groupInviteMessage type
+          // Try using relayMessage instead of sendMessage to avoid media type issues
+          try {
+            const messageKey = {
+              remoteJid: userJid,
+              fromMe: true,
+              id: require('crypto').randomBytes(16).toString('hex')
+            };
+            
+            const message = {
+              key: messageKey,
+              message: {
+                groupInviteMessage: inviteMessage
+              },
+              messageTimestamp: Math.floor(Date.now() / 1000)
+            };
+            
+            console.log('📤 Using relayMessage to send invite...');
+            await sockInst.relayMessage(userJid, message.message, { messageId: messageKey.id });
+            console.log('✅ Invite card sent via relayMessage!');
+          } catch (relayError) {
+            console.log('❌ relayMessage failed, trying alternative approach:', relayError.message);
+            
+            // Alternative: Use extendedTextMessage with context info for invite
+            try {
+              const contextInfo = {
+                groupInviteMessage: inviteMessage
+              };
+              
+              await sockInst.sendMessage(userJid, {
+                text: `📨 *GROUP INVITATION*
 
-📨 You've been invited to join *${groupName}*!
+⚠️ Cannot add you directly due to your privacy settings
 
-🔗 ${inviteLink}
+🎯 *You are invited to join:*
+*${groupName}*
 
-⏰ This invite link expires in 3 days.
+🔗 *Invite Code:* ${inviteCode}
 
-Tap the link above to join the group.`
-          });
+⏰ *Expires in:* 3 days`,
+                contextInfo: contextInfo
+              });
+              console.log('✅ Invite sent via extendedTextMessage with context!');
+            } catch (altError) {
+              console.log('❌ Alternative approach failed, final fallback to simple text:', altError.message);
+              // Final fallback to simple text with invite link
+              await sockInst.sendMessage(userJid, {
+                text: `📨 *GROUP INVITATION*
+
+⚠️ Cannot add you directly due to your privacy settings
+
+🎯 *You are invited to join:*
+*${groupName}*
+
+🔗 *Invite Code:* ${inviteCode}
+
+⏰ *Expires in:* 3 days
+
+💡 Use this code to join the group via WhatsApp's invite feature.`
+              });
+            }
+          }
           
           // Notify in group with mention
           await sockInst.sendMessage(msg.key.remoteJid, {
             text: `⚠️ Could not add @${number} due to privacy settings.
 
-📨 An invite link has been sent to the user.`,
+📨 A user-specific invite has been sent to the user.`,
             mentions: [userJid]
           });
           
+          console.log('✅ User-specific invite card sent successfully!');
+          
         } catch (inviteError) {
-          console.error('❌ Error generating invite link:', inviteError);
-          await sockInst.sendMessage(msg.key.remoteJid, { 
-            text: `⚠️ Privacy blocked, but failed to generate invite link: ${inviteError.message}` 
-          });
+          console.error('❌ Error sending user-specific invite:', inviteError);
+          // Final fallback to regular text invite
+          try {
+            const fallbackCode = await sockInst.groupInviteCode(msg.key.remoteJid);
+            const inviteLink = `https://chat.whatsapp.com/${fallbackCode}`;
+            await sockInst.sendMessage(userJid, {
+              text: `📨 *GROUP INVITATION*
+
+⚠️ Cannot add you directly due to your privacy settings
+
+🔗 *Click here to join:*
+${inviteLink}
+
+⏰ *Expires in:* 3 days`
+            });
+          } catch (finalError) {
+            console.error('❌ Final fallback failed:', finalError);
+            await sockInst.sendMessage(msg.key.remoteJid, { 
+              text: `⚠️ Privacy blocked, and failed to generate any invite link: ${finalError.message}` 
+            });
+          }
         }
       } else {
         await sockInst.sendMessage(msg.key.remoteJid, { text: `❌ Failed to add (${status || 'unknown'})` });
