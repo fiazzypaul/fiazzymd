@@ -6,6 +6,7 @@ const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
 const { createStickerBuffer } = require('./features/sticker');
+const gifFeature = require('./features/gif');
 const { enableWelcome, disableWelcome, isWelcomeEnabled, sendWelcomeMessage, sendGoodbyeMessage } = require('./features/welcome');
 const gemini = require('./features/gemini');
 const imagesCF = require('./features/images_cf');
@@ -945,7 +946,7 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         }
     });
 
-    registerCommand('sticker', 'Convert replied image to sticker', async (sock, msg) => {
+    registerCommand('sticker', 'Convert replied image to sticker or GIF for short videos', async (sock, msg) => {
         const chatId = msg.key.remoteJid;
         const m = msg.message || {};
         const quotedMsg = getQuotedMessage(msg);
@@ -955,16 +956,26 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         }
         let q = quotedMsg;
         if (q.ephemeralMessage) q = q.ephemeralMessage.message;
-        if (!q.imageMessage) {
-            await sock.sendMessage(chatId, { text: `❌ Reply to an image to convert into sticker` });
-            return;
-        }
         try {
-            const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-            const stickerBuffer = await createStickerBuffer(buffer, 'Fiazzy-Md', 'fiazzy');
-            await sock.sendMessage(chatId, { sticker: stickerBuffer });
+            if (q.videoMessage) {
+                try {
+                    const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+                    const mp4Gif = await gifFeature.convertVideoToGif(buffer, { maxSeconds: 8 });
+                    await sock.sendMessage(chatId, { video: mp4Gif, gifPlayback: true, mimetype: 'video/mp4', caption: 'GIF' });
+                } catch (e) {
+                    await sock.sendMessage(chatId, { text: `❌ Failed to create GIF: ${e.message}` });
+                }
+                return;
+            }
+            if (q.imageMessage) {
+                const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+                const stickerBuffer = await createStickerBuffer(buffer, 'Fiazzy-Md', 'fiazzy');
+                await sock.sendMessage(chatId, { sticker: stickerBuffer });
+                return;
+            }
+            await sock.sendMessage(chatId, { text: `❌ Reply to an image or short video` });
         } catch (error) {
-            await sock.sendMessage(chatId, { text: `❌ Failed to create sticker: ${error.message}` });
+            await sock.sendMessage(chatId, { text: `❌ Failed to process media: ${error.message}` });
         }
     });
 
@@ -2012,6 +2023,22 @@ ${config.prefix}setvar <key> <value>
     registerCommand('getjid', 'Show current chat JID', async (sock, msg) => {
         const jid = msg.key.remoteJid;
         await sock.sendMessage(jid, { text: `🆔 JID: ${jid}` });
+    });
+
+    registerCommand('gif', 'Convert replied short video to GIF', async (sock, msg) => {
+        const chatId = msg.key.remoteJid;
+        const quotedMsg = getQuotedMessage(msg);
+        if (!quotedMsg) { await sock.sendMessage(chatId, { text: `💡 Reply to a short video with ${config.prefix}gif` }); return; }
+        let q = quotedMsg;
+        if (q.ephemeralMessage) q = q.ephemeralMessage.message;
+        if (!q.videoMessage) { await sock.sendMessage(chatId, { text: `❌ Reply to a short video` }); return; }
+        try {
+            const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+            const mp4Gif = await gifFeature.convertVideoToGif(buffer, { maxSeconds: 8 });
+            await sock.sendMessage(chatId, { video: mp4Gif, gifPlayback: true, mimetype: 'video/mp4', caption: 'GIF' }, { quoted: msg });
+        } catch (e) {
+            await sock.sendMessage(chatId, { text: `❌ Failed to convert to GIF: ${e.message}` });
+        }
     });
 
     registerCommand('savejid', 'Save a name → JID mapping', async (sock, msg, args) => {
