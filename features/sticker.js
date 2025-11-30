@@ -4,7 +4,7 @@ let ffmpeg = null;
 let ffmpegPath = null;
 try { ffmpeg = require('fluent-ffmpeg'); ffmpegPath = require('@ffmpeg-installer/ffmpeg').path; if (ffmpegPath) ffmpeg.setFfmpegPath(ffmpegPath); } catch {}
 
-async function createStickerBuffer(inputBuffer, pack = 'Fiazzy-Md', author = 'fiazzy') {
+async function createStickerBuffer(inputBuffer, pack = 'FIAZZY-MD', author = 'fiazzypaul') {
   try {
     let StickerModule;
     try { StickerModule = require('wa-sticker-formatter'); } catch {}
