@@ -46,8 +46,53 @@ module.exports = function registerGroupCommands(params) {
       if (String(status) === '200') {
         await sockInst.sendMessage(msg.key.remoteJid, { text: `✅ Added @${number}`, mentions: [userJid] });
       } else if (String(status) === '403') {
-        const code = await sockInst.groupInviteCode(msg.key.remoteJid);
-        await sockInst.sendMessage(msg.key.remoteJid, { text: `⚠️ Privacy blocked. Invite link: https://chat.whatsapp.com/${code}` });
+        // Privacy blocked - generate regular group invite link
+        try {
+          console.log('⚠️ User privacy blocked. Generating regular group invite link...');
+          
+          // Generate regular group invite code (not the add_request code)
+          const inviteCode = await sockInst.groupInviteCode(msg.key.remoteJid);
+          console.log('Generated invite code from groupInviteCode():', inviteCode);
+          
+          // Get group metadata for better messaging
+          let groupName = 'the group';
+          try {
+            const groupMeta = await sockInst.groupMetadata(msg.key.remoteJid);
+            groupName = groupMeta.subject || 'the group';
+          } catch (e) {
+            // Use default name if metadata fetch fails
+          }
+          
+          // Send proper WhatsApp invite link with enhanced formatting
+          const inviteLink = `https://chat.whatsapp.com/${inviteCode}`;
+          console.log('Generated invite link:', inviteLink);
+          
+          await sockInst.sendMessage(userJid, {
+            text: `⚠️ *Cannot add you directly due to your privacy settings*
+
+📨 You've been invited to join *${groupName}*!
+
+🔗 ${inviteLink}
+
+⏰ This invite link expires in 3 days.
+
+Tap the link above to join the group.`
+          });
+          
+          // Notify in group with mention
+          await sockInst.sendMessage(msg.key.remoteJid, {
+            text: `⚠️ Could not add @${number} due to privacy settings.
+
+📨 An invite link has been sent to the user.`,
+            mentions: [userJid]
+          });
+          
+        } catch (inviteError) {
+          console.error('❌ Error generating invite link:', inviteError);
+          await sockInst.sendMessage(msg.key.remoteJid, { 
+            text: `⚠️ Privacy blocked, but failed to generate invite link: ${inviteError.message}` 
+          });
+        }
       } else {
         await sockInst.sendMessage(msg.key.remoteJid, { text: `❌ Failed to add (${status || 'unknown'})` });
       }
