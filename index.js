@@ -26,6 +26,7 @@ const registerGroupCommands = require('./features/group');
 const mediafire = require('./lib/mediafire');
 const registerMediafireCommand = require('./features/mediafire');
 const registerAntiwordsCommand = require('./features/antiwords');
+const registerApkCommand = require('./features/apk');
 
 // Bot Configuration from .env
 const config = {
@@ -656,6 +657,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}songs    - Download songs
 │ ${config.prefix}yts      - YouTube search
 │ ${config.prefix}mediafire - Download from MediaFire
+│ ${config.prefix}apk      - Download Android APK files
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -2766,6 +2768,14 @@ ${config.prefix}setvar <key> <value>
     }
     catch (e) {
       console.error('❌ Failed to register antiwords command:', e && e.message ? e.message : e);
+    }
+
+    // Register apk command
+    try {
+      registerApkCommand({ registerCommand });
+    }
+    catch (e) {
+      console.error('❌ Failed to register apk command:', e && e.message ? e.message : e);
     }
 
     return sock;

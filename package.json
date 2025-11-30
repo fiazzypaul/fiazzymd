@@ -9,7 +9,8 @@
     "logs": "npx pm2 logs FiazzyMD",
     "stop": "npx pm2 stop FiazzyMD",
     "shutdown": "npx pm2 stop FiazzyMD && npx pm2 delete FiazzyMD && npx pm2 kill",
-    "clean": "rmdir /s /q sessions auth_info_baileys 2>NUL || echo Cleaned up sessions"
+    "clean": "rmdir /s /q sessions auth_info_baileys 2>NUL || echo Cleaned up sessions",
+    "test:nsfw": "node scripts/nsfw-test.js"
   },
   "keywords": [],
   "author": "",
