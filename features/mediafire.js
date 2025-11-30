@@ -4,6 +4,9 @@
  */
 
 module.exports = function registerMediafireCommand({ registerCommand }) {
+    const config = {
+        prefix: process.env.PREFIX || '.'
+    };
     
     registerCommand('mediafire', 'Download files from MediaFire', async (sock, msg, args) => {
         const mediafire = require('../lib/mediafire');
