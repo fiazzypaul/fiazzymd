@@ -27,6 +27,7 @@ const mediafire = require('./lib/mediafire');
 const registerMediafireCommand = require('./features/mediafire');
 const registerAntiwordsCommand = require('./features/antiwords');
 const registerApkCommand = require('./features/apk');
+const registerEmojimixCommand = require('./features/emojimix');
 
 // Bot Configuration from .env
 const config = {
@@ -667,6 +668,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │    • ${config.prefix}movie trending | random | <query>
 │ ${config.prefix}anime - Anime recommendations
 │    • ${config.prefix}anime top | seasonal | random | <query>
+│ ${config.prefix}emojimix - Mix two emojis into sticker
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1051,12 +1053,14 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
                       `• OWNER_NUMBER (alias: owner) - Owner number\n` +
                       `• BOT_NAME (alias: name) - Bot name\n` +
                       `• AUTO_VIEW_ONCE (alias: viewonce) - true/false\n` +
-                      `• AUTO_ANTI_DELETE (alias: antidelete) - true/false\n\n` +
+                      `• AUTO_ANTI_DELETE (alias: antidelete) - true/false\n` +
+                      `• TMDB_API_KEY (alias: tmdb) - TMDb API key\n\n` +
                       `*Examples:*\n` +
                       `${config.prefix}setvar mode private\n` +
                       `${config.prefix}setvar BOT_MODE public\n` +
                       `${config.prefix}setvar PREFIX !\n` +
-                      `${config.prefix}setvar owner 2349012345678\n\n` +
+                      `${config.prefix}setvar owner 2349012345678\n` +
+                      `${config.prefix}setvar tmdb <API_KEY>\n\n` +
                       `💡 *Tip:* Use shortcut commands like ${config.prefix}mode, ${config.prefix}prefix instead!`
             });
             return;
@@ -1083,7 +1087,8 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             'GPT': 'OPENAI_API_KEY',
             'CLOUDFLARE_ACCOUNT': 'CF_ACCOUNT_ID',
             'CF_ACCOUNT': 'CF_ACCOUNT_ID',
-            'CF_MODEL': 'CF_IMAGE_MODEL'
+            'CF_MODEL': 'CF_IMAGE_MODEL',
+            'TMDB': 'TMDB_API_KEY'
         };
 
         // Use alias mapping if exists
@@ -1700,7 +1705,7 @@ ${config.prefix}setvar <key> <value>
             const primary = args[0].toLowerCase();
             const secondary = (args[1] || '').toLowerCase();
             if (primary === 'movie') {
-                const text = `📖 *${config.prefix}movie*\n\n*Usage:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie <query>\n\n*Examples:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie inception`;
+                const text = `📖 *${config.prefix}movie*\n\n*Usage:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie <query>\n\n*Examples:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie inception\n\n*Setup (owner):*\n- ${config.prefix}setvar TMDB_API_KEY <your_tmdb_key>\n- Or add TMDB_API_KEY to your .env file\n\n*Where to get a key:*\n- Create a free account at https://www.themoviedb.org/ and generate an API key (v3).`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
@@ -1721,6 +1726,11 @@ ${config.prefix}setvar <key> <value>
             }
             if (primary === 'yts') {
                 const text = `📖 *${config.prefix}yts*\n\nYouTube search.\n\n*Usage:*\n- ${config.prefix}yts <query> → list videos\n- ${config.prefix}yts <youtube_url> → show details\n\n*Example:*\n- ${config.prefix}yts baymax`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'emojimix') {
+                const text = `📖 *${config.prefix}emojimix*\n\nMix two emojis into a sticker.\n\n*Usage:*\n- ${config.prefix}emojimix <emoji1>+<emoji2>\n- ${config.prefix}emojimix <emoji1> <emoji2>\n\n*Examples:*\n- ${config.prefix}emojimix 😺+🎩\n- ${config.prefix}emojimix 🔥 🍀`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
@@ -2512,6 +2522,39 @@ ${config.prefix}setvar <key> <value>
             console.log('🔍 Prefix:', config.prefix);
             console.log('🔍 Starts with prefix?', messageText.startsWith(config.prefix));
 
+            // Check for emojimix sticker session (before prefix and command processing)
+            try {
+                const storageKeyEmojiMix = `${chatId}:${userId}`;
+                const EmojimixFeature = require('./features/emojimix');
+                const sessions = EmojimixFeature.sessions;
+                const composeBuffers = EmojimixFeature.composeBuffers;
+                const mObj = msg.message || {};
+                let stickerMsg = mObj.stickerMessage;
+                if (mObj.ephemeralMessage && mObj.ephemeralMessage.message) {
+                    const inner = mObj.ephemeralMessage.message;
+                    if (inner.stickerMessage) stickerMsg = inner.stickerMessage;
+                }
+                const sess = sessions.get(storageKeyEmojiMix);
+                if (sess && stickerMsg) {
+                    const buffer = await downloadMediaMessage({ message: msg.message }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+                    sess.items.push(buffer);
+                    if (sess.items.length >= 2) {
+                        sessions.delete(storageKeyEmojiMix);
+                        try { await sock.sendPresenceUpdate('composing', chatId); } catch {}
+                        const mixed = await composeBuffers(sess.items[0], sess.items[1]);
+                        const { createStickerBuffer } = require('./features/sticker');
+                        const stickerBuf = await createStickerBuffer(mixed, 'Fiazzy-Md', 'fiazzy');
+                        await sock.sendMessage(chatId, { sticker: stickerBuf });
+                        try { await sock.sendPresenceUpdate('paused', chatId); } catch {}
+                    } else {
+                        await sock.sendMessage(chatId, { text: `🧩 Sticker 1 received. Send one more sticker.` });
+                    }
+                    return;
+                }
+            } catch (e) {
+                console.error('Emojimix session error:', e.message);
+            }
+
             // Check for song download number reply (before prefix check)
             const userId = msg.key.participant || msg.key.remoteJid;
             const chatId = msg.key.remoteJid;
@@ -2773,6 +2816,7 @@ ${config.prefix}setvar <key> <value>
     // Register apk command
     try {
       registerApkCommand({ registerCommand });
+      registerEmojimixCommand({ registerCommand });
     }
     catch (e) {
       console.error('❌ Failed to register apk command:', e && e.message ? e.message : e);
