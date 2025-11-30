@@ -25,6 +25,7 @@ const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
 const mediafire = require('./lib/mediafire');
 const registerMediafireCommand = require('./features/mediafire');
+const registerAntiwordsCommand = require('./features/antiwords');
 
 // Bot Configuration from .env
 const config = {
@@ -616,6 +617,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}resetwarn
 │ ${config.prefix}warnlimit
 │ ${config.prefix}antilink
+│ ${config.prefix}antiword
 │ ${config.prefix}welcome
 │ ${config.prefix}invite
 │ ${config.prefix}revoke
@@ -2420,6 +2422,90 @@ ${config.prefix}setvar <key> <value>
             // Return if no message text
             if (!messageText || messageText.length === 0) return;
 
+            // Antiwords check for group messages
+            if (Permissions.isGroup(msg.key.remoteJid) && !msg.key.fromMe) {
+                try {
+                    const { checkAntiwords } = require('./lib');
+                    const antiwordsResult = checkAntiwords(msg.key.remoteJid, messageText);
+                    
+                    if (antiwordsResult.found) {
+                        console.log(`Antiword detected in ${msg.key.remoteJid}: ${antiwordsResult.words.join(', ')}`);
+                        
+                        // First, delete the offensive message
+                        try {
+                            await sock.sendMessage(msg.key.remoteJid, {
+                                delete: msg.key
+                            });
+                        } catch (error) {
+                            console.error('Failed to delete antiword message:', error);
+                        }
+                        
+                        // Take action based on settings
+                        switch (antiwordsResult.action) {
+                            case 'kick':
+                                try {
+                                    await sock.groupParticipantsUpdate(
+                                        msg.key.remoteJid,
+                                        [msg.key.participant || msg.key.remoteJid],
+                                        'remove'
+                                    );
+                                    await sock.sendMessage(msg.key.remoteJid, {
+                                        text: `⚠️ User removed for using forbidden words: ${antiwordsResult.words.join(', ')}`
+                                    });
+                                } catch (error) {
+                                    console.error('Failed to kick user:', error);
+                                    await sock.sendMessage(msg.key.remoteJid, {
+                                        text: `⚠️ Forbidden words detected: ${antiwordsResult.words.join(', ')}`
+                                    });
+                                }
+                                break;
+                                
+                            case 'warn':
+                                // Use the existing warning system
+                                const limit = warnLimits.get(msg.key.remoteJid) || 3;
+                                const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
+                                const c = (groupMap.get(msg.key.participant) || 0) + 1;
+                                groupMap.set(msg.key.participant, c);
+                                warnCounts.set(msg.key.remoteJid, groupMap);
+                                
+                                if (c >= limit) {
+                                    try {
+                                        await sock.groupParticipantsUpdate(
+                                            msg.key.remoteJid,
+                                            [msg.key.participant],
+                                            'remove'
+                                        );
+                                        await sock.sendMessage(msg.key.remoteJid, {
+                                            text: `⛔ Antiword warn limit reached. Kicked @${msg.key.participant.split('@')[0]} for using: ${antiwordsResult.words.join(', ')}`,
+                                            mentions: [msg.key.participant]
+                                        });
+                                    } catch (e) {
+                                        await sock.sendMessage(msg.key.remoteJid, {
+                                            text: `⚠️ Failed to kick: ${e.message}`
+                                        });
+                                    }
+                                } else {
+                                    await sock.sendMessage(msg.key.remoteJid, {
+                                        text: `⚠️ Warning: Forbidden words detected: ${antiwordsResult.words.join(', ')}\n\n@${msg.key.participant.split('@')[0]} warned (${c}/${limit})`,
+                                        mentions: [msg.key.participant]
+                                    });
+                                }
+                                break;
+                                
+                            default:
+                                // For 'null' action, just notify that message was removed
+                                await sock.sendMessage(msg.key.remoteJid, {
+                                    text: `⚠️ Message removed for containing forbidden words: ${antiwordsResult.words.join(', ')}`
+                                });
+                                break;
+                        }
+                        return; // Don't process commands if antiword was found
+                    }
+                } catch (error) {
+                    console.error('Antiwords check error:', error);
+                }
+            }
+
             console.log('💬 Message:', messageText);
             console.log('🔍 Prefix:', config.prefix);
             console.log('🔍 Starts with prefix?', messageText.startsWith(config.prefix));
@@ -2672,6 +2758,14 @@ ${config.prefix}setvar <key> <value>
     }
     catch (e) {
       console.error('❌ Failed to register mediafire command:', e && e.message ? e.message : e);
+    }
+
+    // Register antiwords command
+    try {
+      registerAntiwordsCommand({ registerCommand });
+    }
+    catch (e) {
+      console.error('❌ Failed to register antiwords command:', e && e.message ? e.message : e);
     }
 
     return sock;
