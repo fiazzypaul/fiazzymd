@@ -23,6 +23,8 @@ const scheduler = require('./features/scheduler');
 const jids = require('./features/jids');
 const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
+const mediafire = require('./lib/mediafire');
+const registerMediafireCommand = require('./features/mediafire');
 
 // Bot Configuration from .env
 const config = {
@@ -269,6 +271,80 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
         const result = await system.updateAndRestart();
         if (!result.success || (result.message || '').includes('already up to date')) {
             await sock.sendMessage(msg.key.remoteJid, { text: result.message });
+        }
+    });
+
+    // MediaFire Download Command
+    registerCommand('mediafire', 'Download files from MediaFire', async (sock, msg, args) => {
+        if (args.length === 0) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `📁 *MEDIAFIRE DOWNLOADER*
+
+` +
+                      `*Usage:* ${config.prefix}mediafire <mediafire_url>
+
+` +
+                      `*Examples:*
+` +
+                      `${config.prefix}mediafire https://www.mediafire.com/file/abc123/filename.zip
+` +
+                      `${config.prefix}mediafire https://www.mediafire.com/file/xyz789/document.pdf
+
+` +
+                      `💡 Supports all MediaFire file types`
+            });
+            return;
+        }
+
+        const url = args[0];
+        
+        // Validate URL
+        if (!url.includes('mediafire.com')) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: '❌ Invalid MediaFire URL. Please provide a valid MediaFire link.'
+            });
+            return;
+        }
+
+        try {
+            // Send initial message
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `📁 *Processing MediaFire link...*
+
+🔗 URL: ${url}
+⏳ Please wait while I extract the download link...`
+            });
+
+            // Extract download information
+            const result = await mediafire(url);
+            
+            if (!result) {
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: '❌ Could not extract download link from MediaFire. The file might be removed or the URL is invalid.'
+                });
+                return;
+            }
+
+            // Send download information
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `📁 *MediaFire File Found!*
+
+` +
+                      `📄 *Filename:* ${result.filename}
+` +
+                      `📊 *Size:* ${result.size}
+` +
+                      `🔗 *Download Link:* ${result.url}
+
+` +
+                      `💡 Click the link above to download the file directly.`
+            });
+
+        } catch (error) {
+            console.error('MediaFire download error:', error);
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Error processing MediaFire link: ${error.message}`
+            });
         }
     });
 
@@ -575,8 +651,9 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╭──────────────────────╮
 │  📥 *DOWNLOADS*        │
 ╰──────────────────────╯
-│ ${config.prefix}songs - Download songs
-│ ${config.prefix}yts   - YouTube search
+│ ${config.prefix}songs    - Download songs
+│ ${config.prefix}yts      - YouTube search
+│ ${config.prefix}mediafire - Download from MediaFire
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -2587,6 +2664,14 @@ ${config.prefix}setvar <key> <value>
     }
     catch (e) { 
       console.error('❌ Failed to register group commands:', e && e.message ? e.message : e); 
+    }
+
+    // Register mediafire command
+    try {
+      registerMediafireCommand({ registerCommand });
+    }
+    catch (e) {
+      console.error('❌ Failed to register mediafire command:', e && e.message ? e.message : e);
     }
 
     return sock;
