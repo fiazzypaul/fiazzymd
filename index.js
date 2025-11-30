@@ -42,6 +42,7 @@ const registerMediafireCommand = require('./features/mediafire');
 const registerAntiwordsCommand = require('./features/antiwords');
 const registerApkCommand = require('./features/apk');
 const registerEmojimixCommand = require('./features/emojimix');
+const saveStatus = require('./lib/saveStatus');
 
 // Bot Configuration from .env
 const config = {
@@ -989,6 +990,10 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         } catch (error) {
             await sock.sendMessage(chatId, { text: `❌ Failed to delete: ${error.message}` });
         }
+    });
+
+    registerCommand('save', 'Save replied status media/text to your chat', async (sock, msg) => {
+        await saveStatus(sock, msg);
     });
 
     registerCommand('sticker', 'Convert replied image to sticker or GIF for short videos', async (sock, msg) => {
