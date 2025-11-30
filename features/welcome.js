@@ -70,7 +70,7 @@ async function sendWelcomeMessage(sock, groupJid, userJid) {
     caption = caption.replace('{group}', meta?.subject || 'this group');
   } catch {}
   caption = caption.replace('@user', `@${name}`);
-  await sock.sendMessage(groupJid, { image: { url: ppUrl }, caption, mentions: [userId] });
+  await sock.sendMessage(groupJid, { image: { url: ppUrl }, caption, mentions: [userId], contextInfo: { forwardingScore: 1, isForwarded: true, forwardedNewsletterMessageInfo: { newsletterJid: '120363423276650635@newsletter', newsletterName: 'FIAZZY-MD', serverMessageId: -1 } } });
 }
 
 async function sendGoodbyeMessage(sock, groupJid, userJid) {

@@ -7,6 +7,19 @@ const fs = require('fs');
 const path = require('path');
 const { createStickerBuffer } = require('./features/sticker');
 const gifFeature = require('./features/gif');
+const CHANNEL_URL = 'https://whatsapp.com/channel/0029Vb6vjvH1CYoRVJOHes3S';
+const CHANNEL_CONTEXT = {
+  contextInfo: {
+    forwardingScore: 1,
+    isForwarded: true,
+    forwardedNewsletterMessageInfo: {
+      newsletterJid: '120363423276650635@newsletter',
+      newsletterName: 'FIAZZY-MD',
+      serverMessageId: -1
+    }
+  }
+};
+const autoStatus = require('./features/autostatus');
 const { enableWelcome, disableWelcome, isWelcomeEnabled, sendWelcomeMessage, sendGoodbyeMessage } = require('./features/welcome');
 const gemini = require('./features/gemini');
 const imagesCF = require('./features/images_cf');
@@ -651,6 +664,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}uptime (owner only)
 │ ${config.prefix}restart (owner only)
 │ ${config.prefix}update (owner only)
+│ ${config.prefix}autostatus (owner only)
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -708,20 +722,51 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
                 console.log('📤 Sending menu with image...');
                 await sock.sendMessage(msg.key.remoteJid, {
                     image: fs.readFileSync(menuImagePath),
-                    caption: menuText
+                    caption: menuText,
+                    contextInfo: {
+                        forwardingScore: 1,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: '120363423276650635@newsletter',
+                            newsletterName: 'FIAZZY-MD',
+                            serverMessageId: -1
+                        }
+                    }
                 });
                 console.log('✅ Menu sent successfully with image');
             } else {
                 // Send text only if image doesn't exist
                 console.log('📤 Sending menu as text (no image found)...');
-                await sock.sendMessage(msg.key.remoteJid, { text: menuText });
+                await sock.sendMessage(msg.key.remoteJid, { 
+                    text: menuText,
+                    contextInfo: {
+                        forwardingScore: 1,
+                        isForwarded: true,
+                        forwardedNewsletterMessageInfo: {
+                            newsletterJid: '120363423276650635@newsletter',
+                            newsletterName: 'FIAZZY-MD',
+                            serverMessageId: -1
+                        }
+                    }
+                });
                 console.log('✅ Menu sent successfully as text');
             }
         } catch (error) {
             // Fallback to text if image fails
             console.error('⚠️  Failed to send menu with image:', error.message);
             console.log('📤 Fallback: Sending menu as text...');
-            await sock.sendMessage(msg.key.remoteJid, { text: menuText });
+            await sock.sendMessage(msg.key.remoteJid, { 
+                text: menuText,
+                contextInfo: {
+                    forwardingScore: 1,
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363423276650635@newsletter',
+                        newsletterName: 'FIAZZY-MD',
+                        serverMessageId: -1
+                    }
+                }
+            });
             console.log('✅ Menu sent successfully as text (fallback)');
         }
     });
@@ -960,22 +1005,22 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             if (q.videoMessage) {
                 try {
                     const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-                    const mp4Gif = await gifFeature.convertVideoToGif(buffer, { maxSeconds: 8 });
-                    await sock.sendMessage(chatId, { video: mp4Gif, gifPlayback: true, mimetype: 'video/mp4', caption: 'GIF' });
+                    const mp4Gif = await gifFeature.convertVideoToGif(buffer, { maxSeconds: 8, watermarkText: CHANNEL_URL });
+                    await sock.sendMessage(chatId, { video: mp4Gif, gifPlayback: true, mimetype: 'video/mp4', caption: 'GIF', ...CHANNEL_CONTEXT });
                 } catch (e) {
-                    await sock.sendMessage(chatId, { text: `❌ Failed to create GIF: ${e.message}` });
+                    await sock.sendMessage(chatId, { text: `❌ Failed to create GIF: ${e.message}\n\n${CHANNEL_URL}`, ...CHANNEL_CONTEXT });
                 }
                 return;
             }
             if (q.imageMessage) {
-                const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-                const stickerBuffer = await createStickerBuffer(buffer, 'Fiazzy-Md', 'fiazzy');
-                await sock.sendMessage(chatId, { sticker: stickerBuffer });
+            const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+            const stickerBuffer = await createStickerBuffer(buffer, 'FIAZZY-MD', 'fiazzypaul');
+            await sock.sendMessage(chatId, { sticker: stickerBuffer });
                 return;
             }
-            await sock.sendMessage(chatId, { text: `❌ Reply to an image or short video` });
+            await sock.sendMessage(chatId, { text: `❌ Reply to an image or short video\n\n${CHANNEL_URL}`, ...CHANNEL_CONTEXT });
         } catch (error) {
-            await sock.sendMessage(chatId, { text: `❌ Failed to process media: ${error.message}` });
+            await sock.sendMessage(chatId, { text: `❌ Failed to process media: ${error.message}\n\n${CHANNEL_URL}`, ...CHANNEL_CONTEXT });
         }
     });
 
@@ -1775,6 +1820,11 @@ ${config.prefix}setvar <key> <value>
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
+            if (primary === 'autostatus') {
+                const text = `📖 *${config.prefix}autostatus* (owner only)\n\nAutomatically views your contacts' Status updates and can react with 💚.\n\n*Usage:*\n- ${config.prefix}autostatus on\n- ${config.prefix}autostatus off\n- ${config.prefix}autostatus react on\n- ${config.prefix}autostatus react off\n\n*Notes:*\n- Owner only (matches OWNER_NUMBER)\n- Reactions use 💚 to avoid spam\n- Includes your channel card in messages`;
+                await sock.sendMessage(msg.key.remoteJid, { text, ...CHANNEL_CONTEXT });
+                return;
+            }
             if (primary === 'gemini') {
                 const text = `📖 *${config.prefix}gemini*\n\nChatbot commands:\n- ${config.prefix}gemini on (owner only)\n- ${config.prefix}gemini off (owner only)\n- ${config.prefix}gemini clearchat\n- ${config.prefix}gemini <prompt>\n\nTo set API key (owner only):\n- ${config.prefix}setvar gemini <API_KEY>\n\nNotes:\n- Global toggle applies everywhere\n- Requires GEMINI_API_KEY in .env`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
@@ -2028,16 +2078,16 @@ ${config.prefix}setvar <key> <value>
     registerCommand('gif', 'Convert replied short video to GIF', async (sock, msg) => {
         const chatId = msg.key.remoteJid;
         const quotedMsg = getQuotedMessage(msg);
-        if (!quotedMsg) { await sock.sendMessage(chatId, { text: `💡 Reply to a short video with ${config.prefix}gif` }); return; }
+        if (!quotedMsg) { await sock.sendMessage(chatId, { text: `💡 Reply to a short video with ${config.prefix}gif\n\n${CHANNEL_URL}`, ...CHANNEL_CONTEXT }); return; }
         let q = quotedMsg;
         if (q.ephemeralMessage) q = q.ephemeralMessage.message;
-        if (!q.videoMessage) { await sock.sendMessage(chatId, { text: `❌ Reply to a short video` }); return; }
+        if (!q.videoMessage) { await sock.sendMessage(chatId, { text: `❌ Reply to a short video\n\n${CHANNEL_URL}`, ...CHANNEL_CONTEXT }); return; }
         try {
             const buffer = await downloadMediaMessage({ message: quotedMsg }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
-            const mp4Gif = await gifFeature.convertVideoToGif(buffer, { maxSeconds: 8 });
-            await sock.sendMessage(chatId, { video: mp4Gif, gifPlayback: true, mimetype: 'video/mp4', caption: 'GIF' }, { quoted: msg });
+            const mp4Gif = await gifFeature.convertVideoToGif(buffer, { maxSeconds: 8, watermarkText: CHANNEL_URL });
+            await sock.sendMessage(chatId, { video: mp4Gif, gifPlayback: true, mimetype: 'video/mp4', caption: 'GIF', ...CHANNEL_CONTEXT }, { quoted: msg });
         } catch (e) {
-            await sock.sendMessage(chatId, { text: `❌ Failed to convert to GIF: ${e.message}` });
+            await sock.sendMessage(chatId, { text: `❌ Failed to convert to GIF: ${e.message}\n\n${CHANNEL_URL}`, ...CHANNEL_CONTEXT });
         }
     });
 
@@ -2570,7 +2620,7 @@ ${config.prefix}setvar <key> <value>
                         try { await sock.sendPresenceUpdate('composing', chatId); } catch {}
                         const mixed = await composeBuffers(sess.items[0], sess.items[1]);
                         const { createStickerBuffer } = require('./features/sticker');
-                        const stickerBuf = await createStickerBuffer(mixed, 'Fiazzy-Md', 'fiazzy');
+                        const stickerBuf = await createStickerBuffer(mixed, 'FIAZZY-MD', 'fiazzypaul');
                         await sock.sendMessage(chatId, { sticker: stickerBuf });
                         try { await sock.sendPresenceUpdate('paused', chatId); } catch {}
                     } else {
@@ -2816,6 +2866,10 @@ ${config.prefix}setvar <key> <value>
         }
     });
 
+    sock.ev.on('messages.upsert', async (status) => {
+        try { await autoStatus.handleStatusUpdate(sock, status); } catch (e) { console.error('autostatus upsert error:', e.message); }
+    });
+
     // Register group commands
     try { 
       registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings }); 
@@ -2844,6 +2898,14 @@ ${config.prefix}setvar <key> <value>
     try {
       registerApkCommand({ registerCommand });
       registerEmojimixCommand({ registerCommand });
+      registerCommand('autostatus', 'Enable or disable auto status view/react', async (sock, msg, args) => {
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(msg.key.remoteJid, { text: `❌ Owner only.\n\n${CHANNEL_URL}` }); return; }
+        await autoStatus.autoStatusCommand(sock, msg.key.remoteJid, msg, args);
+      });
     }
     catch (e) {
       console.error('❌ Failed to register apk command:', e && e.message ? e.message : e);

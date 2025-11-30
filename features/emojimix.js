@@ -36,7 +36,7 @@ async function mixEmojisToSticker(sock, msg, emoji1, emoji2) {
   } else if (imageResponse.buffer) {
     imageBuffer = await imageResponse.buffer();
   }
-  const stickerBuffer = await createStickerBuffer(imageBuffer, 'Fiazzy-Md', 'fiazzy');
+  const stickerBuffer = await createStickerBuffer(imageBuffer, 'FIAZZY-MD', 'fiazzypaul');
   await sock.sendMessage(chatId, { sticker: stickerBuffer }, { quoted: msg });
 }
 
@@ -51,12 +51,12 @@ function registerEmojimixCommand({ registerCommand }) {
       const raw = (msg.message?.conversation || msg.message?.extendedTextMessage?.text || '').trim();
       const [e1, e2] = parseEmojisFromArgs(raw, args);
       if (!e1 || !e2) {
-        await sock.sendMessage(msg.key.remoteJid, { text: usage(prefix) });
+        await sock.sendMessage(msg.key.remoteJid, { text: `${usage(prefix)}\n\nhttps://whatsapp.com/channel/0029Vb6vjvH1CYoRVJOHes3S`, contextInfo: { forwardingScore: 1, isForwarded: true, forwardedNewsletterMessageInfo: { newsletterJid: '120363423276650635@newsletter', newsletterName: 'FIAZZY-MD', serverMessageId: -1 } } });
         return;
       }
       await mixEmojisToSticker(sock, msg, e1, e2);
     } catch (error) {
-      await sock.sendMessage(msg.key.remoteJid, { text: `❌ Failed to mix emojis. ${usage(prefix)}` });
+      await sock.sendMessage(msg.key.remoteJid, { text: `❌ Failed to mix emojis. ${usage(prefix)}\n\nhttps://whatsapp.com/channel/0029Vb6vjvH1CYoRVJOHes3S`, contextInfo: { forwardingScore: 1, isForwarded: true, forwardedNewsletterMessageInfo: { newsletterJid: '120363423276650635@newsletter', newsletterName: 'FIAZZY-MD', serverMessageId: -1 } } });
     }
   };
   registerCommand('emojimix', 'Mix two emojis into sticker', handler);
