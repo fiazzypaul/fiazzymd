@@ -105,6 +105,8 @@ const antiLinkSettings = new Map();
 const warnLimits = new Map();
 const warnCounts = new Map();
 const antiDeleteChats = new Map();
+let connectedAtMs = 0;
+const CONNECT_GRACE_MS = 3000;
 
 // Initialize auto view-once from .env
 if (process.env.AUTO_VIEW_ONCE === 'true') {
@@ -459,6 +461,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
         } else if (connection === 'open') {
             // Reset reconnect attempts on successful connection
             reconnectAttempts = 0;
+            connectedAtMs = Date.now();
             console.log('✅ Connection successful!\n');
 
             // Auto-detect and set owner number from bot's login
@@ -924,12 +927,13 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             // If contextInfo has isViewOnce flag or quotedMessage came from view-once
             hasViewOnce = contextInfo.isViewOnce === true ||
                          contextInfo.isViewOnce === 1 ||
-                         (contextInfo.quotedMessage && (quotedMsg.imageMessage || quotedMsg.videoMessage));
+                         (contextInfo.quotedMessage && (quotedMsg.imageMessage || quotedMsg.videoMessage || quotedMsg.audioMessage));
         }
 
         console.log('🔍 Has view-once?', !!hasViewOnce);
 
-        if (!hasViewOnce) {
+        const isQuotedMedia = !!(quotedMsg.imageMessage || quotedMsg.videoMessage || quotedMsg.audioMessage);
+        if (!hasViewOnce && !isQuotedMedia) {
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `❌ That's not a view-once message!\n\n💡 The message you replied to is a regular ${Object.keys(checkMsg)[0] || 'message'}`
             });
@@ -941,7 +945,7 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
         console.log('View-once unwrapped:', inner ? 'Yes' : 'No');
 
         // If unwrapping failed, quotedMsg might already be the inner content
-        if (!inner && (quotedMsg.imageMessage || quotedMsg.videoMessage)) {
+        if (!inner && (quotedMsg.imageMessage || quotedMsg.videoMessage || quotedMsg.audioMessage)) {
             console.log('🔍 Using quotedMsg directly (already unwrapped)');
             inner = quotedMsg;
         }
@@ -963,6 +967,9 @@ ${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public
             } else if (inner.videoMessage) {
                 console.log('📤 Sending video...');
                 await sock.sendMessage(msg.key.remoteJid, { video: buffer, caption: 'Opened view-once 👀' });
+            } else if (inner.audioMessage) {
+                console.log('📤 Sending audio...');
+                await sock.sendMessage(msg.key.remoteJid, { audio: buffer, mimetype: inner.audioMessage.mimetype || 'audio/mpeg', ptt: false, fileName: 'audio' });
             } else {
                 console.log('❌ Unsupported media type');
                 await sock.sendMessage(msg.key.remoteJid, { text: `❌ Unsupported view-once media type` });
@@ -2377,6 +2384,13 @@ ${config.prefix}setvar <key> <value>
         try {
             const msg = m.messages[0];
             if (!msg.message) return;
+            const rawTs = msg.messageTimestamp;
+            let tsMs = 0;
+            if (rawTs !== undefined && rawTs !== null) {
+                const n = Number(rawTs);
+                tsMs = n < 10000000000 ? n * 1000 : n;
+            }
+            if (connectedAtMs && tsMs && tsMs < (connectedAtMs - CONNECT_GRACE_MS)) return;
             try { presenceTargets.add(msg.key.remoteJid); } catch {}
 
             const preText = extractMessageText(msg.message).trim();
@@ -2872,7 +2886,17 @@ ${config.prefix}setvar <key> <value>
     });
 
     sock.ev.on('messages.upsert', async (status) => {
-        try { await autoStatus.handleStatusUpdate(sock, status); } catch (e) { console.error('autostatus upsert error:', e.message); }
+        try {
+            const first = status.messages && status.messages[0];
+            const rawTs = first && first.messageTimestamp;
+            let tsMs = 0;
+            if (rawTs !== undefined && rawTs !== null) {
+                const n = Number(rawTs);
+                tsMs = n < 10000000000 ? n * 1000 : n;
+            }
+            if (connectedAtMs && tsMs && tsMs < (connectedAtMs - CONNECT_GRACE_MS)) return;
+            await autoStatus.handleStatusUpdate(sock, status);
+        } catch (e) { console.error('autostatus upsert error:', e.message); }
     });
 
     // Register group commands
