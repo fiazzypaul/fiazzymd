@@ -34,6 +34,7 @@ const presence = require('./features/presence');
 const alive = require('./features/alive');
 const ytsFeature = require('./features/yts');
 const scheduler = require('./features/scheduler');
+const { updateGroupProfilePicture } = require('./features/gpp');
 const jids = require('./features/jids');
 const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
@@ -2900,12 +2901,29 @@ ${config.prefix}setvar <key> <value>
     });
 
     // Register group commands
-    try { 
-      registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings }); 
+    try {
+      registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings });
     }
-    catch (e) { 
-      console.error('❌ Failed to register group commands:', e && e.message ? e.message : e); 
+    catch (e) {
+      console.error('❌ Failed to register group commands:', e && e.message ? e.message : e);
     }
+
+    // Group Profile Picture Command
+    registerCommand('gpp', 'Update group profile picture', async (sock, msg) => {
+        try {
+            await updateGroupProfilePicture(sock, msg);
+        } catch (error) {
+            console.error('❌ GPP command error:', error);
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `❌ Failed to update group profile picture!\n\n` +
+                      `Error: ${error.message}\n\n` +
+                      `💡 Make sure:\n` +
+                      `• You replied to an image\n` +
+                      `• I am a group admin\n` +
+                      `• The image is valid`
+            });
+        }
+    });
 
     // Register mediafire command
     try {
