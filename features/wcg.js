@@ -3,9 +3,12 @@
  *
  * Players must continue the chain by starting their word with the last letter of the previous word
  * Two-player game where players tag their opponent to challenge them
+ * Players have 10 seconds to respond or they lose
+ * Words must be valid English words (verified via dictionary API)
  */
 
 const activeGames = new Map();
+const fetch = require('node-fetch');
 
 /**
  * Create a new game
@@ -29,11 +32,29 @@ function createGame(chatId, player1, player2) {
         currentTurn: 'player1', // 'player1' or 'player2'
         startTime: Date.now(),
         status: 'playing', // 'playing', 'ended'
-        moves: 0
+        moves: 0,
+        turnStartTime: Date.now(), // Track when current turn started
+        timeoutId: null // Store timeout ID for cleanup
     };
 
     activeGames.set(gameId, game);
     return game;
+}
+
+/**
+ * Validate if a word exists in English dictionary
+ * @param {string} word - Word to validate
+ * @returns {Promise<boolean>} True if word is valid
+ */
+async function isValidEnglishWord(word) {
+    try {
+        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`);
+        return response.ok; // Returns true if status is 200, false for 404
+    } catch (error) {
+        console.error('Dictionary API error:', error);
+        // If API fails, allow the word (don't penalize for API issues)
+        return true;
+    }
 }
 
 /**
@@ -50,7 +71,44 @@ function getGame(chatId) {
  * @param {string} chatId - Chat/Group ID
  */
 function deleteGame(chatId) {
+    const game = activeGames.get(chatId);
+    if (game && game.timeoutId) {
+        clearTimeout(game.timeoutId);
+    }
     activeGames.delete(chatId);
+}
+
+/**
+ * Start turn timer (10 seconds)
+ * @param {string} chatId - Chat/Group ID
+ * @param {Function} onTimeout - Callback when timer expires
+ */
+function startTurnTimer(chatId, onTimeout) {
+    const game = getGame(chatId);
+    if (!game) return;
+
+    // Clear existing timeout if any
+    if (game.timeoutId) {
+        clearTimeout(game.timeoutId);
+    }
+
+    // Set new timeout
+    game.turnStartTime = Date.now();
+    game.timeoutId = setTimeout(() => {
+        onTimeout(chatId);
+    }, 10000); // 10 seconds
+}
+
+/**
+ * Get remaining time for current turn
+ * @param {Object} game - Game state
+ * @returns {number} Remaining seconds
+ */
+function getRemainingTime(game) {
+    if (!game || !game.turnStartTime) return 0;
+    const elapsed = Date.now() - game.turnStartTime;
+    const remaining = Math.max(0, 10 - Math.floor(elapsed / 1000));
+    return remaining;
 }
 
 /**
@@ -58,9 +116,9 @@ function deleteGame(chatId) {
  * @param {string} chatId - Chat/Group ID
  * @param {string} playerJid - Player submitting the word
  * @param {string} word - The word submitted
- * @returns {Object} Result of the submission
+ * @returns {Promise<Object>} Result of the submission
  */
-function submitWord(chatId, playerJid, word) {
+async function submitWord(chatId, playerJid, word) {
     const game = getGame(chatId);
 
     if (!game) {
@@ -84,6 +142,18 @@ function submitWord(chatId, playerJid, word) {
     // Check if word contains only letters
     if (!/^[a-z]+$/i.test(normalizedWord)) {
         return { success: false, message: '❌ Word must contain only letters!' };
+    }
+
+    // Check if word is a valid English word
+    const isValid = await isValidEnglishWord(normalizedWord);
+    if (!isValid) {
+        return {
+            success: false,
+            gameOver: true,
+            loser: playerJid,
+            winner: game.players[game.currentTurn === 'player1' ? 'player2' : 'player1'],
+            message: `❌ "${normalizedWord}" is not a valid English word!\n\n@${playerJid.split('@')[0]} loses! 💀`
+        };
     }
 
     // Check if word has been used
@@ -184,5 +254,7 @@ module.exports = {
     submitWord,
     getMentionedUser,
     formatGame,
+    startTurnTimer,
+    getRemainingTime,
     activeGames
 };

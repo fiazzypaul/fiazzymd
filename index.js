@@ -2874,7 +2874,10 @@ ${config.prefix}setvar <key> <value>
 
                     // Check if it's a valid word attempt (letters only, 2+ chars)
                     if (/^[a-z]+$/i.test(word) && word.length >= 2) {
-                        const result = wcg.submitWord(chatId, userId, word);
+                        // Show "checking word..." message
+                        await sock.sendMessage(chatId, { text: '🔍 Checking word...' });
+
+                        const result = await wcg.submitWord(chatId, userId, word);
 
                         console.log('🔗 WCG Move Result:', result);
 
@@ -2896,7 +2899,28 @@ ${config.prefix}setvar <key> <value>
                             return;
                         }
 
-                        // Valid move - send updated game status
+                        // Valid move - restart timer for next player
+                        wcg.startTurnTimer(chatId, async (timedOutChatId) => {
+                            const timedOutGame = wcg.getGame(timedOutChatId);
+                            if (!timedOutGame) return;
+
+                            const loser = timedOutGame.players[timedOutGame.currentTurn];
+                            const winner = timedOutGame.players[timedOutGame.currentTurn === 'player1' ? 'player2' : 'player1'];
+
+                            await sock.sendMessage(timedOutChatId, {
+                                text: `⏰ *TIME'S UP!*\n\n` +
+                                      `@${loser.split('@')[0]} took too long to respond!\n\n` +
+                                      `🏆 @${winner.split('@')[0]} wins!\n\n` +
+                                      `📊 Final Stats:\n` +
+                                      `💬 Words used: ${timedOutGame.usedWords.size}\n` +
+                                      `🎯 Moves: ${timedOutGame.moves}`,
+                                mentions: [loser, winner]
+                            });
+
+                            wcg.deleteGame(timedOutChatId);
+                        });
+
+                        // Send updated game status
                         const gameText = wcg.formatGame(result.game);
                         await sock.sendMessage(chatId, {
                             text: gameText,
@@ -3231,11 +3255,13 @@ ${config.prefix}setvar <key> <value>
                       `*Usage:*\n` +
                       `${config.prefix}wcg @user - Challenge a player\n` +
                       `${config.prefix}wcg end - End current game\n\n` +
-                      `*How to play:*\n` +
+                      `*Rules:*\n` +
                       `1. Tag someone to challenge them\n` +
-                      `2. Take turns saying words\n` +
+                      `2. Take turns saying valid English words\n` +
                       `3. Each word must start with the last letter of the previous word\n` +
-                      `4. Can't repeat words!\n\n` +
+                      `4. Can't repeat words already used\n` +
+                      `5. ⏰ You have 10 seconds to respond or you lose!\n` +
+                      `6. Only real English words are accepted (dictionary verified)\n\n` +
                       `*Example:* ${config.prefix}wcg @friend`
             });
             return;
@@ -3258,6 +3284,27 @@ ${config.prefix}setvar <key> <value>
 
         // Create game
         const game = wcg.createGame(chatId, playerJid, opponentJid);
+
+        // Start the turn timer
+        wcg.startTurnTimer(chatId, async (timedOutChatId) => {
+            const timedOutGame = wcg.getGame(timedOutChatId);
+            if (!timedOutGame) return;
+
+            const loser = timedOutGame.players[timedOutGame.currentTurn];
+            const winner = timedOutGame.players[timedOutGame.currentTurn === 'player1' ? 'player2' : 'player1'];
+
+            await sock.sendMessage(timedOutChatId, {
+                text: `⏰ *TIME'S UP!*\n\n` +
+                      `@${loser.split('@')[0]} took too long to respond!\n\n` +
+                      `🏆 @${winner.split('@')[0]} wins!\n\n` +
+                      `📊 Final Stats:\n` +
+                      `💬 Words used: ${timedOutGame.usedWords.size}\n` +
+                      `🎯 Moves: ${timedOutGame.moves}`,
+                mentions: [loser, winner]
+            });
+
+            wcg.deleteGame(timedOutChatId);
+        });
 
         const gameText = wcg.formatGame(game);
         await sock.sendMessage(chatId, {
