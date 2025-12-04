@@ -320,6 +320,15 @@ ${inviteLink}
     const ctx = msg.message?.extendedTextMessage?.contextInfo;
     if (ctx?.participant) targetJid = ctx.participant; else if (ctx?.mentionedJid?.length) targetJid = ctx.mentionedJid[0]; else if (args[0]) { const num = args[0].replace(/[^0-9]/g,''); if (num) targetJid = `${num}@s.whatsapp.net`; }
     if (!targetJid) { await sockInst.sendMessage(msg.key.remoteJid, { text: '❌ Specify a user to warn (reply or mention)' }); return; }
+
+    // Check if target is bot owner
+    const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+    const targetNumber = targetJid.split('@')[0].replace(/[^0-9]/g, '');
+    if (targetNumber === normalizedOwner || targetJid.includes(normalizedOwner)) {
+      await sockInst.sendMessage(msg.key.remoteJid, { text: '❌ Cannot warn the bot owner!' });
+      return;
+    }
+
     const limit = warnLimits.get(msg.key.remoteJid) || 3;
     const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
     const c = (groupMap.get(targetJid) || 0) + 1; groupMap.set(targetJid, c); warnCounts.set(msg.key.remoteJid, groupMap);

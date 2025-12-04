@@ -1,8 +1,8 @@
 module.exports = (config) => {
-  const groupAdminCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn', 'welcome', 'del']);
-  const groupOnlyCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn', 'welcome', 'del']);
+  const groupAdminCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn', 'welcome', 'del', 'gpp']);
+  const groupOnlyCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn', 'welcome', 'del', 'gpp', 'left']);
   const generalCommands = new Set(['menu', 'ping', 'help', 'session', 'vv', 'sticker', 'img', 'movie', 'anime', 'alive']);
-  const varCommands = new Set(['autoviewonce', 'setvar', 'mode', 'prefix', 'ownernumber', 'seevar', 'antidelete', 'wapresence']); // Commands that modify global .env settings
+  const varCommands = new Set(['autoviewonce', 'setvar', 'mode', 'prefix', 'ownernumber', 'seevar', 'antidelete', 'wapresence', 'left']); // Commands that modify global .env settings
 
   const isGroup = (jid) => jid.endsWith('@g.us');
 
