@@ -35,6 +35,7 @@ const alive = require('./features/alive');
 const ytsFeature = require('./features/yts');
 const scheduler = require('./features/scheduler');
 const { updateGroupProfilePicture } = require('./features/gpp');
+const tictactoe = require('./features/tictactoe');
 const jids = require('./features/jids');
 const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
@@ -625,25 +626,24 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╭──────────────────────╮
 │  👥 *GROUP COMMANDS*  │
 ╰──────────────────────╯
-│ ${config.prefix}add
-│ ${config.prefix}kick
-│ ${config.prefix}kickall
-│ ${config.prefix}promote
-│ ${config.prefix}demote
-│ ${config.prefix}tag
-│ ${config.prefix}tagall
-│ ${config.prefix}mute
-│ ${config.prefix}unmute
-│ ${config.prefix}warn
-│ ${config.prefix}resetwarn
-│ ${config.prefix}warnlimit
-│ ${config.prefix}antilink
-│ ${config.prefix}antiword
-│ ${config.prefix}welcome
-│ ${config.prefix}invite
-│ ${config.prefix}revoke
-│ ${config.prefix}join
-│ ${config.prefix}ginfo
+│ ${config.prefix}add - Add member
+│ ${config.prefix}kick - Remove member
+│ ${config.prefix}promote - Make admin
+│ ${config.prefix}demote - Remove admin
+│ ${config.prefix}tag - Tag members
+│ ${config.prefix}tagall - List all members
+│ ${config.prefix}mute - Mute group
+│ ${config.prefix}unmute - Unmute group
+│ ${config.prefix}warn - Warn user
+│ ${config.prefix}resetwarn - Reset warnings
+│ ${config.prefix}antilink - Anti-link settings
+│ ${config.prefix}antiword - Anti-word filter
+│ ${config.prefix}welcome - Welcome settings
+│ ${config.prefix}gpp - Change group picture
+│ ${config.prefix}left - Leave group (owner only)
+│ ${config.prefix}invite - Get invite link
+│ ${config.prefix}revoke - Reset invite link
+│ ${config.prefix}ginfo - Group info
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -675,10 +675,11 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╭──────────────────────╮
 │  📥 *DOWNLOADS*        │
 ╰──────────────────────╯
-│ ${config.prefix}songs    - Download songs
-│ ${config.prefix}yts      - YouTube search
-│ ${config.prefix}mediafire - Download from MediaFire
-│ ${config.prefix}apk      - Download Android APK files
+│ ${config.prefix}song <query> - Download YouTube audio
+│ ${config.prefix}ytvideo <query> - Download YouTube video
+│ ${config.prefix}yts <query> - YouTube search
+│ ${config.prefix}mediafire <url> - Download from MediaFire
+│ ${config.prefix}apk <name> - Download Android APK
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -689,6 +690,13 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}anime - Anime recommendations
 │    • ${config.prefix}anime top | seasonal | random | <query>
 │ ${config.prefix}emojimix - Mix two emojis into sticker
+╰──────────────────────╯
+
+╭──────────────────────╮
+│  🎮 *GAMES*            │
+╰──────────────────────╯
+│ ${config.prefix}ttt @user - Play tic-tac-toe
+│ ${config.prefix}ttt end - End current game
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -2395,7 +2403,55 @@ ${config.prefix}setvar <key> <value>
             try { presenceTargets.add(msg.key.remoteJid); } catch {}
 
             const preText = extractMessageText(msg.message).trim();
-            if (msg.key.fromMe && !preText.startsWith(config.prefix)) return;
+
+            // Check if sender is owner (to allow owner's non-command messages like game moves)
+            const msgSenderJid = msg.key.participant || msg.key.remoteJid;
+            const msgSenderNum = msgSenderJid.split('@')[0];
+            const normalizeNum = (num) => String(num).replace(/[^0-9]/g, '');
+            let ownerNum = config.ownerNumber;
+            if (sock.user) {
+                ownerNum = sock.user.id.split(':')[0];
+            }
+            const normOwner = normalizeNum(ownerNum);
+            const normSender = normalizeNum(msgSenderNum);
+
+            let isMsgFromOwner = false;
+
+            // If fromMe is true, it means the message is from the bot's account (which IS the owner)
+            // According to permissions.js line 79-81, fromMe means it's from the owner
+            if (msg.key.fromMe) {
+                isMsgFromOwner = true;
+            } else {
+                // For messages not from the bot (fromMe=false), check if sender matches owner number
+                // Method 1: Exact number match
+                if (normSender === normOwner) {
+                    isMsgFromOwner = true;
+                }
+                // Method 2: Check if sender JID contains owner number
+                if (!isMsgFromOwner && msgSenderJid.includes(normOwner)) {
+                    isMsgFromOwner = true;
+                }
+                // Method 3: For groups, check if participant contains the owner number
+                if (!isMsgFromOwner && sock.user) {
+                    const isGrp = msg.key.remoteJid.endsWith('@g.us');
+                    if (isGrp && msg.key.participant) {
+                        isMsgFromOwner = msg.key.participant.includes(normOwner);
+                    }
+                }
+            }
+
+            // Only ignore fromMe messages if sender is NOT the owner (i.e., bot's own automated messages)
+            // But since fromMe=true MEANS it's the owner, this will never ignore owner messages
+            console.log('🔍 FromMe Filter Check:', {
+                fromMe: msg.key.fromMe,
+                isMsgFromOwner,
+                msgSenderJid,
+                normOwner,
+                normSender,
+                startsWithPrefix: preText.startsWith(config.prefix),
+                willBeIgnored: msg.key.fromMe && !isMsgFromOwner && !preText.startsWith(config.prefix)
+            });
+            if (msg.key.fromMe && !isMsgFromOwner && !preText.startsWith(config.prefix)) return;
 
             console.log('📩 New message from:', msg.key.remoteJid);
             console.log('📋 Message type keys:', Object.keys(msg.message));
@@ -2711,12 +2767,6 @@ ${config.prefix}setvar <key> <value>
                 }
             }
 
-            const isPlainNumber = /^\d+$/.test(messageText.trim());
-            if (isPlainNumber && !messageText.startsWith(config.prefix)) {
-                await sock.sendMessage(chatId, { text: 'ℹ️ No active selection.\n\nUse ' + config.prefix + 'song <query> or ' + config.prefix + 'ytvideo <query> and then reply with a number.' });
-                return;
-            }
-
             // Check for video download reply
             const storageKeyVidReply = `${chatId}:${userId}`;
             const videoSession = ytvideo.getSearchSession(storageKeyVidReply);
@@ -2764,6 +2814,55 @@ ${config.prefix}setvar <key> <value>
                         });
                     }
                     return; // Don't process as a command
+                }
+            }
+
+            // Check for tic-tac-toe move (only if not a command)
+            if (!messageText.startsWith(config.prefix)) {
+                const tttGame = tictactoe.getGame(chatId);
+                if (tttGame) {
+                    const trimmed = messageText.trim();
+                    const position = parseInt(trimmed);
+
+                    console.log('🎮 TTT Move Check:', {
+                        chatId,
+                        userId,
+                        'msg.key.participant': msg.key.participant,
+                        'msg.key.remoteJid': msg.key.remoteJid,
+                        'msg.key.fromMe': msg.key.fromMe,
+                        trimmed,
+                        position,
+                        isValidNumber: !isNaN(position) && position >= 1 && position <= 9,
+                        currentTurn: tttGame.currentTurn,
+                        currentPlayer: tttGame.players[tttGame.currentTurn],
+                        playerX: tttGame.players.X,
+                        playerO: tttGame.players.O
+                    });
+
+                    if (!isNaN(position) && position >= 1 && position <= 9) {
+                        const result = tictactoe.makeMove(chatId, userId, position);
+
+                        console.log('🎮 TTT Move Result:', result);
+
+                        if (!result.success) {
+                            await sock.sendMessage(chatId, { text: result.message });
+                            return;
+                        }
+
+                        // Send updated board
+                        const boardText = tictactoe.formatBoard(result.game);
+                        await sock.sendMessage(chatId, {
+                            text: boardText,
+                            mentions: [result.game.players.X, result.game.players.O]
+                        });
+
+                        // If game is over, delete it
+                        if (result.gameOver) {
+                            tictactoe.deleteGame(chatId);
+                        }
+
+                        return; // Don't process as a command
+                    }
                 }
             }
 
@@ -2919,10 +3018,135 @@ ${config.prefix}setvar <key> <value>
                       `Error: ${error.message}\n\n` +
                       `💡 Make sure:\n` +
                       `• You replied to an image\n` +
-                      `• I am a group admin\n` +
+                      `• You are a group admin\n` +
                       `• The image is valid`
             });
         }
+    });
+
+    // Leave Group Command
+    registerCommand('left', 'Make bot leave the group', async (sock, msg) => {
+        const jid = msg.key.remoteJid;
+
+        // Check if it's a group
+        if (!jid.endsWith('@g.us')) {
+            await sock.sendMessage(jid, {
+                text: '❌ This command only works in groups!'
+            });
+            return;
+        }
+
+        try {
+            // Send goodbye message
+            await sock.sendMessage(jid, {
+                text: '👋 *Goodbye!*\n\n' +
+                      '🤖 Bot is leaving the group as requested.\n\n' +
+                      '💫 Thanks for using FiazzyMD!'
+            });
+
+            // Wait 2 seconds then leave
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await sock.groupLeave(jid);
+            console.log(`✅ Bot left group: ${jid}`);
+
+        } catch (error) {
+            console.error('❌ Error leaving group:', error);
+            await sock.sendMessage(jid, {
+                text: `❌ Failed to leave group!\n\nError: ${error.message}`
+            });
+        }
+    });
+
+    // Tic-Tac-Toe Game Command
+    registerCommand('ttt', 'Play tic-tac-toe with another user', async (sock, msg, args) => {
+        const chatId = msg.key.remoteJid;
+        const playerJid = msg.key.participant || msg.key.remoteJid;
+
+        // Check if user wants to end the game
+        if (args[0] === 'end') {
+            const game = tictactoe.getGame(chatId);
+            if (!game) {
+                await sock.sendMessage(chatId, { text: '❌ No active game to end.' });
+                return;
+            }
+            tictactoe.deleteGame(chatId);
+            await sock.sendMessage(chatId, { text: '✅ Game ended.' });
+            return;
+        }
+
+        // Debug command to check game state
+        if (args[0] === 'debug') {
+            const game = tictactoe.getGame(chatId);
+            if (!game) {
+                await sock.sendMessage(chatId, { text: '❌ No active game.' });
+                return;
+            }
+            await sock.sendMessage(chatId, {
+                text: `🔍 *DEBUG INFO*\n\n` +
+                      `Player X: @${game.players.X.split('@')[0]}\n` +
+                      `Player O: @${game.players.O.split('@')[0]}\n` +
+                      `Current Turn: ${game.currentTurn}\n` +
+                      `Your JID: @${playerJid.split('@')[0]}`,
+                mentions: [game.players.X, game.players.O, playerJid]
+            });
+            return;
+        }
+
+        // Get mentioned user (opponent)
+        const opponentJid = tictactoe.getMentionedUser(msg);
+
+        if (!opponentJid) {
+            await sock.sendMessage(chatId, {
+                text: '🎮 *TIC-TAC-TOE GAME* 🎮\n\n' +
+                      `*Usage:*\n` +
+                      `${config.prefix}ttt @user - Start a game\n` +
+                      `${config.prefix}ttt end - End current game\n\n` +
+                      `*How to play:*\n` +
+                      `1. Tag someone to challenge them\n` +
+                      `2. Reply with a number (1-9) to make your move\n` +
+                      `3. First to get 3 in a row wins!\n\n` +
+                      `*Example:* ${config.prefix}ttt @friend`
+            });
+            return;
+        }
+
+        // Check if user is trying to play with themselves
+        if (opponentJid === playerJid) {
+            await sock.sendMessage(chatId, { text: '❌ You cannot play with yourself!' });
+            return;
+        }
+
+        // Check if there's already an active game
+        const existingGame = tictactoe.getGame(chatId);
+        if (existingGame) {
+            await sock.sendMessage(chatId, {
+                text: '⚠️ There is already an active game in this chat!\n\n' +
+                      `Use ${config.prefix}ttt end to end it first, then start a new game.`
+            });
+            return;
+        }
+
+        // Create new game
+        console.log('🎮 Creating TTT game:', {
+            chatId,
+            playerJid,
+            opponentJid
+        });
+
+        const game = tictactoe.createGame(chatId, playerJid, opponentJid);
+
+        console.log('🎮 Game created:', {
+            playerX: game.players.X,
+            playerO: game.players.O,
+            currentTurn: game.currentTurn
+        });
+
+        const boardText = tictactoe.formatBoard(game);
+
+        await sock.sendMessage(chatId, {
+            text: boardText,
+            mentions: [playerJid, opponentJid]
+        });
     });
 
     // Register mediafire command
