@@ -36,6 +36,7 @@ const ytsFeature = require('./features/yts');
 const scheduler = require('./features/scheduler');
 const { updateGroupProfilePicture } = require('./features/gpp');
 const tictactoe = require('./features/tictactoe');
+const wcg = require('./features/wcg');
 const jids = require('./features/jids');
 const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
@@ -697,6 +698,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╰──────────────────────╯
 │ ${config.prefix}ttt @user - Play tic-tac-toe
 │ ${config.prefix}ttt end - End current game
+│ ${config.prefix}wcg @user - Word chain game
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -2864,6 +2866,46 @@ ${config.prefix}setvar <key> <value>
                         return; // Don't process as a command
                     }
                 }
+
+                // Check for word chain game move
+                const wcgGame = wcg.getGame(chatId);
+                if (wcgGame) {
+                    const word = messageText.trim();
+
+                    // Check if it's a valid word attempt (letters only, 2+ chars)
+                    if (/^[a-z]+$/i.test(word) && word.length >= 2) {
+                        const result = wcg.submitWord(chatId, userId, word);
+
+                        console.log('🔗 WCG Move Result:', result);
+
+                        if (!result.success) {
+                            if (result.gameOver) {
+                                // Player lost
+                                await sock.sendMessage(chatId, {
+                                    text: result.message + '\n\n' +
+                                          `🏆 @${result.winner.split('@')[0]} wins!\n\n` +
+                                          `📊 Final Stats:\n` +
+                                          `💬 Words used: ${wcgGame.usedWords.size}\n` +
+                                          `🎯 Moves: ${wcgGame.moves}`,
+                                    mentions: [result.loser, result.winner]
+                                });
+                                wcg.deleteGame(chatId);
+                            } else {
+                                await sock.sendMessage(chatId, { text: result.message });
+                            }
+                            return;
+                        }
+
+                        // Valid move - send updated game status
+                        const gameText = wcg.formatGame(result.game);
+                        await sock.sendMessage(chatId, {
+                            text: gameText,
+                            mentions: [result.game.players.player1, result.game.players.player2]
+                        });
+
+                        return; // Don't process as a command
+                    }
+                }
             }
 
             // Check if message starts with prefix
@@ -3145,6 +3187,81 @@ ${config.prefix}setvar <key> <value>
 
         await sock.sendMessage(chatId, {
             text: boardText,
+            mentions: [playerJid, opponentJid]
+        });
+    });
+
+    // Register Word Chain Game command
+    registerCommand('wcg', 'Play word chain game with another player', async (sock, msg, args) => {
+        const chatId = msg.key.remoteJid;
+        const playerJid = msg.key.participant || msg.key.remoteJid;
+
+        // Handle 'end' subcommand
+        if (args[0] === 'end') {
+            const game = wcg.getGame(chatId);
+            if (!game) {
+                await sock.sendMessage(chatId, { text: '❌ No active game to end.' });
+                return;
+            }
+
+            const duration = Math.floor((Date.now() - game.startTime) / 1000);
+            const minutes = Math.floor(duration / 60);
+            const seconds = duration % 60;
+
+            await sock.sendMessage(chatId, {
+                text: `🏁 *GAME ENDED!*\n\n` +
+                      `📊 *Stats:*\n` +
+                      `💬 Words used: ${game.usedWords.size}\n` +
+                      `🎯 Moves: ${game.moves}\n` +
+                      `⏱️ Duration: ${minutes}m ${seconds}s\n` +
+                      `🔤 Last word: ${game.currentWord || 'none'}\n\n` +
+                      `Thanks for playing! 🎉`
+            });
+
+            wcg.deleteGame(chatId);
+            return;
+        }
+
+        // Get opponent
+        const opponentJid = wcg.getMentionedUser(msg);
+
+        if (!opponentJid) {
+            await sock.sendMessage(chatId, {
+                text: '🔗 *WORD CHAIN GAME* 🔗\n\n' +
+                      `*Usage:*\n` +
+                      `${config.prefix}wcg @user - Challenge a player\n` +
+                      `${config.prefix}wcg end - End current game\n\n` +
+                      `*How to play:*\n` +
+                      `1. Tag someone to challenge them\n` +
+                      `2. Take turns saying words\n` +
+                      `3. Each word must start with the last letter of the previous word\n` +
+                      `4. Can't repeat words!\n\n` +
+                      `*Example:* ${config.prefix}wcg @friend`
+            });
+            return;
+        }
+
+        if (opponentJid === playerJid) {
+            await sock.sendMessage(chatId, { text: '❌ You cannot play with yourself!' });
+            return;
+        }
+
+        // Check for existing game
+        const existingGame = wcg.getGame(chatId);
+        if (existingGame) {
+            await sock.sendMessage(chatId, {
+                text: '⚠️ There is already an active game in this chat!\n\n' +
+                      `Use ${config.prefix}wcg end to end it first, then start a new game.`
+            });
+            return;
+        }
+
+        // Create game
+        const game = wcg.createGame(chatId, playerJid, opponentJid);
+
+        const gameText = wcg.formatGame(game);
+        await sock.sendMessage(chatId, {
+            text: gameText,
             mentions: [playerJid, opponentJid]
         });
     });
