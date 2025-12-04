@@ -3,12 +3,12 @@
  *
  * Players must continue the chain by starting their word with the last letter of the previous word
  * Two-player game where players tag their opponent to challenge them
- * Players have 10 seconds to respond or they lose
+ * Players have 20 seconds to respond or they lose
  * Words must be valid English words (verified via dictionary API)
  */
 
 const activeGames = new Map();
-const fetch = require('node-fetch');
+const axios = require('axios');
 
 /**
  * Create a new game
@@ -48,10 +48,15 @@ function createGame(chatId, player1, player2) {
  */
 async function isValidEnglishWord(word) {
     try {
-        const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`);
-        return response.ok; // Returns true if status is 200, false for 404
+        const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${word.toLowerCase()}`;
+        const response = await axios.get(url, {
+            validateStatus: (status) => status === 200 || status === 404 // Don't throw on 404
+        });
+
+        console.log(`🔍 Dictionary check for "${word}": ${response.status}`);
+        return response.status === 200; // Returns true if status is 200, false for 404
     } catch (error) {
-        console.error('Dictionary API error:', error);
+        console.error('Dictionary API error:', error.message);
         // If API fails, allow the word (don't penalize for API issues)
         return true;
     }
@@ -79,7 +84,7 @@ function deleteGame(chatId) {
 }
 
 /**
- * Start turn timer (10 seconds)
+ * Start turn timer (20 seconds)
  * @param {string} chatId - Chat/Group ID
  * @param {Function} onTimeout - Callback when timer expires
  */
@@ -96,7 +101,7 @@ function startTurnTimer(chatId, onTimeout) {
     game.turnStartTime = Date.now();
     game.timeoutId = setTimeout(() => {
         onTimeout(chatId);
-    }, 10000); // 10 seconds
+    }, 20000); // 20 seconds
 }
 
 /**
@@ -107,7 +112,7 @@ function startTurnTimer(chatId, onTimeout) {
 function getRemainingTime(game) {
     if (!game || !game.turnStartTime) return 0;
     const elapsed = Date.now() - game.turnStartTime;
-    const remaining = Math.max(0, 10 - Math.floor(elapsed / 1000));
+    const remaining = Math.max(0, 20 - Math.floor(elapsed / 1000));
     return remaining;
 }
 

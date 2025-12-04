@@ -3260,7 +3260,7 @@ ${config.prefix}setvar <key> <value>
                       `2. Take turns saying valid English words\n` +
                       `3. Each word must start with the last letter of the previous word\n` +
                       `4. Can't repeat words already used\n` +
-                      `5. ⏰ You have 10 seconds to respond or you lose!\n` +
+                      `5. ⏰ You have 20 seconds to respond or you lose!\n` +
                       `6. Only real English words are accepted (dictionary verified)\n\n` +
                       `*Example:* ${config.prefix}wcg @friend`
             });
