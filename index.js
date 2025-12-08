@@ -1,4 +1,8 @@
 require('dotenv').config();
+
+// START SNAPTIK SERVER WHEN BOT STARTS
+require('./snaptik-server/index.js');
+
 const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, downloadMediaMessage, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
@@ -28,6 +32,7 @@ const fancytext = require('./features/fancytext');
 const createPermissions = require('./permissions');
 const songs = require('./features/songs');
 const ytvideo = require('./features/ytvideo');
+const tiktokDownloader = require('./lib/tiktok');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
 const { searchAnime, getTopAnime, getSeasonalAnime, getRandomAnime, formatAnimeResults, formatAnimeDetails } = require('./features/anime');
 const presence = require('./features/presence');
@@ -678,6 +683,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╰──────────────────────╯
 │ ${config.prefix}song <query> - Download YouTube audio
 │ ${config.prefix}ytvideo <query> - Download YouTube video
+│ ${config.prefix}tiktok <url> - Download TikTok video/images
 │ ${config.prefix}yts <query> - YouTube search
 │ ${config.prefix}mediafire <url> - Download from MediaFire
 │ ${config.prefix}apk <name> - Download Android APK
@@ -1556,6 +1562,25 @@ ${config.prefix}setvar <key> <value>
                       `💡 Please try again later`
             });
         }
+    });
+
+    // Register TikTok downloader command
+    registerCommand('tiktok', 'Download TikTok videos or images', async (sock, msg, args) => {
+        if (args.length === 0) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `📱 *TIKTOK DOWNLOADER*\n\n` +
+                      `*Usage:* ${config.prefix}tiktok <TikTok URL>\n\n` +
+                      `*Examples:*\n` +
+                      `${config.prefix}tiktok https://www.tiktok.com/@user/video/123\n` +
+                      `${config.prefix}tiktok https://vm.tiktok.com/abc123\n\n` +
+                      `📥 Downloads videos and image slideshows\n` +
+                      `💡 Just paste any TikTok link!`
+            });
+            return;
+        }
+
+        const url = args.join(' ');
+        await tiktokDownloader(sock, msg, url);
     });
 
     /* moved to features/group.js */
