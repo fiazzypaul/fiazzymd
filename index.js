@@ -48,6 +48,7 @@ const registerGroupCommands = require('./features/group');
 const mediafire = require('./lib/mediafire');
 const registerMediafireCommand = require('./features/mediafire');
 const registerAntiwordsCommand = require('./features/antiwords');
+const { extractAudioToMp3, reverseMedia } = require('./lib/audio');
 const registerApkCommand = require('./features/apk');
 const registerEmojimixCommand = require('./features/emojimix');
 const saveStatus = require('./lib/saveStatus');
@@ -687,6 +688,13 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}yts <query> - YouTube search
 │ ${config.prefix}mediafire <url> - Download from MediaFire
 │ ${config.prefix}apk <name> - Download Android APK
+╰──────────────────────╯
+
+╭──────────────────────╮
+│  🎵 *AUDIO*            │
+╰──────────────────────╯
+│ ${config.prefix}mp3 - Extract audio from video (reply)
+│ ${config.prefix}reverse - Reverse audio/video (reply)
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1581,6 +1589,16 @@ ${config.prefix}setvar <key> <value>
 
         const url = args.join(' ');
         await tiktokDownloader(sock, msg, url);
+    });
+
+    // Register MP3 extraction command
+    registerCommand('mp3', 'Extract audio from video as MP3', async (sock, msg, args) => {
+        await extractAudioToMp3(sock, msg);
+    });
+
+    // Register reverse media command
+    registerCommand('reverse', 'Reverse audio or video', async (sock, msg, args) => {
+        await reverseMedia(sock, msg);
     });
 
     /* moved to features/group.js */
