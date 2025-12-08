@@ -1,4 +1,7 @@
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+const axios = require('axios');
+
+// Hardcoded TMDB API key (public)
+const TMDB_API_KEY = 'd3c5bc60ef61877b235357e5be4b459b';
 
 /**
  * Search for movies using The Movie Database (TMDb) API
@@ -8,24 +11,22 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
  */
 async function searchMovies(query, limit = 5) {
   try {
-    // TMDb API is free but requires an API key
-    // For now, we'll use a public demo endpoint or require user to set TMDB_API_KEY
-    const apiKey = process.env.TMDB_API_KEY;
+    const url = `https://api.themoviedb.org/3/search/movie?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(query)}&page=1`;
 
-    if (!apiKey) {
-      throw new Error('TMDB_API_KEY not configured. Please contact bot owner.');
+    let response;
+    try {
+      response = await axios.get(url);
+    } catch (error) {
+      // Retry on rate limit or server error
+      if (error.response && (error.response.status === 429 || error.response.status >= 500)) {
+        await new Promise(r => setTimeout(r, 750));
+        response = await axios.get(url);
+      } else {
+        throw error;
+      }
     }
 
-    const url = `https://api.themoviedb.org/3/search/movie?api_key=${apiKey}&query=${encodeURIComponent(query)}&page=1`;
-    let response = await fetch(url);
-    if (!response.ok && (response.status === 429 || response.status >= 500)) {
-      await new Promise(r => setTimeout(r, 750));
-      response = await fetch(url);
-    }
-    if (!response.ok) {
-      throw new Error(`TMDb API error: ${response.status}`);
-    }
-    const data = await response.json();
+    const data = response.data;
     const results = data.results.slice(0, limit);
 
     return results.map((movie, index) => ({
@@ -50,22 +51,22 @@ async function searchMovies(query, limit = 5) {
  */
 async function getTrendingMovies(limit = 5) {
   try {
-    const apiKey = process.env.TMDB_API_KEY;
+    const url = `https://api.themoviedb.org/3/trending/movie/week?api_key=${TMDB_API_KEY}`;
 
-    if (!apiKey) {
-      throw new Error('TMDB_API_KEY not configured. Please contact bot owner.');
+    let response;
+    try {
+      response = await axios.get(url);
+    } catch (error) {
+      // Retry on rate limit or server error
+      if (error.response && (error.response.status === 429 || error.response.status >= 500)) {
+        await new Promise(r => setTimeout(r, 750));
+        response = await axios.get(url);
+      } else {
+        throw error;
+      }
     }
 
-    const url = `https://api.themoviedb.org/3/trending/movie/week?api_key=${apiKey}`;
-    let response = await fetch(url);
-    if (!response.ok && (response.status === 429 || response.status >= 500)) {
-      await new Promise(r => setTimeout(r, 750));
-      response = await fetch(url);
-    }
-    if (!response.ok) {
-      throw new Error(`TMDb API error: ${response.status}`);
-    }
-    const data = await response.json();
+    const data = response.data;
     const results = data.results.slice(0, limit);
 
     return results.map((movie, index) => ({
@@ -89,23 +90,23 @@ async function getTrendingMovies(limit = 5) {
  */
 async function getRandomMovie() {
   try {
-    const apiKey = process.env.TMDB_API_KEY;
-
-    if (!apiKey) {
-      throw new Error('TMDB_API_KEY not configured. Please contact bot owner.');
-    }
-
     const randomPage = Math.floor(Math.random() * 5) + 1; // Random page 1-5
-    const url = `https://api.themoviedb.org/3/movie/popular?api_key=${apiKey}&page=${randomPage}`;
-    let response = await fetch(url);
-    if (!response.ok && (response.status === 429 || response.status >= 500)) {
-      await new Promise(r => setTimeout(r, 750));
-      response = await fetch(url);
+    const url = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&page=${randomPage}`;
+
+    let response;
+    try {
+      response = await axios.get(url);
+    } catch (error) {
+      // Retry on rate limit or server error
+      if (error.response && (error.response.status === 429 || error.response.status >= 500)) {
+        await new Promise(r => setTimeout(r, 750));
+        response = await axios.get(url);
+      } else {
+        throw error;
+      }
     }
-    if (!response.ok) {
-      throw new Error(`TMDb API error: ${response.status}`);
-    }
-    const data = await response.json();
+
+    const data = response.data;
     const randomIndex = Math.floor(Math.random() * data.results.length);
     const movie = data.results[randomIndex];
 
