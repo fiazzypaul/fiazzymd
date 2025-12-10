@@ -3,7 +3,6 @@ const fs = require('fs');
 const fsPromises = require('fs/promises');
 const fse = require('fs-extra');
 const path = require('path');
-const { exec } = require('child_process');
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
 
 const tempDir = './temp';
@@ -41,55 +40,22 @@ const convertStickerToImage = async (sock, quotedMessage, chatId) => {
         await fsPromises.writeFile(stickerFilePath, buffer);
 
         if (isAnimated) {
-            // Convert animated sticker: WebP → GIF → MP4
-            const gifPath = path.join(tempDir, `sticker_${Date.now()}.gif`);
-            const outputVideoPath = path.join(tempDir, `converted_video_${Date.now()}.mp4`);
-
-            // Step 1: Convert WebP to GIF using gif2webp in reverse (or ffmpeg with libwebp_anim)
-            await new Promise((resolve, reject) => {
-                // Use ffmpeg to convert webp to gif first
-                const webpToGifCmd = `ffmpeg -i "${stickerFilePath}" -vf "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${gifPath}"`;
-                exec(webpToGifCmd, (error, stdout, stderr) => {
-                    if (error) {
-                        console.error('WebP to GIF conversion error:', error.message);
-                        // If this fails, try direct conversion
-                        const directCmd = `ffmpeg -i "${stickerFilePath}" "${gifPath}"`;
-                        exec(directCmd, (err2) => {
-                            if (err2) {
-                                reject(error); // Use original error
-                            } else {
-                                resolve();
-                            }
-                        });
-                    } else {
-                        resolve();
-                    }
-                });
-            });
-
-            // Step 2: Convert GIF to MP4
-            await new Promise((resolve, reject) => {
-                const gifToMp4Cmd = `ffmpeg -i "${gifPath}" -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p -movflags +faststart -preset fast "${outputVideoPath}"`;
-                exec(gifToMp4Cmd, (error, stdout, stderr) => {
-                    if (error) {
-                        console.error('GIF to MP4 conversion error:', error.message);
-                        reject(error);
-                    } else {
-                        resolve();
-                    }
-                });
-            });
-
-            const videoBuffer = await fsPromises.readFile(outputVideoPath);
+            // Animated stickers use animated WebP format which is not supported by FFmpeg's native decoder
+            // Inform the user about this limitation
             await sock.sendMessage(chatId, {
-                video: videoBuffer,
-                caption: '✅ *Animated Sticker → Video*\n\n💡 Powered by FiazzyMD',
-                mimetype: 'video/mp4'
+                text: '⚠️ *Animated Sticker Detected*\n\n' +
+                      '❌ Animated stickers cannot be converted to video because:\n\n' +
+                      '• WhatsApp uses animated WebP format\n' +
+                      '• FFmpeg does not support animated WebP decoding\n' +
+                      '• The format uses unsupported chunks (ANIM/ANMF)\n\n' +
+                      '💡 *Alternative:*\n' +
+                      '• Use `.sticker` on a video/GIF to create animated stickers\n' +
+                      '• Send regular stickers (non-animated) for conversion\n\n' +
+                      'Sorry for the inconvenience!'
             });
 
             scheduleFileDeletion(stickerFilePath);
-            scheduleFileDeletion(gifPath);
-            scheduleFileDeletion(outputVideoPath);
+            return;
 
         } else {
             // Convert static sticker to PNG image
@@ -110,7 +76,7 @@ const convertStickerToImage = async (sock, quotedMessage, chatId) => {
     } catch (error) {
         console.error('Error converting sticker:', error);
         await sock.sendMessage(chatId, {
-            text: `❌ Failed to convert sticker!\n\n💡 Error: ${error.message}\n\n*Requirements:*\n- Reply to a sticker\n- FFmpeg installed (for animated stickers)`
+            text: `❌ Failed to convert sticker!\n\n💡 Error: ${error.message}\n\n*Requirements:*\n- Reply to a sticker (static stickers only)\n- Animated stickers are not supported`
         });
     }
 };
