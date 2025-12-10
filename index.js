@@ -1610,21 +1610,39 @@ ${config.prefix}setvar <key> <value>
         try {
             // Check if it's a YouTube URL
             if (youtube.isYTUrl(query)) {
+                const downloadId = `vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
                 await sock.sendMessage(msg.key.remoteJid, {
-                    text: `🎬 *DOWNLOADING VIDEO*\n\n⏳ Please wait, downloading video...\n📹 Quality: Best Available (up to 1080p)...`
+                    text: `🎬 *DOWNLOADING VIDEO*\n\n⏳ Please wait, downloading video...\n📹 Quality: Best Available (up to 1080p)...\n\n💡 Large videos may take a few minutes\n⚠️ Bot will continue to respond while downloading`
                 });
 
-                const videoData = await ytvideo.downloadVideo(query, 'YouTube Video');
+                // Download in background without blocking
+                (async () => {
+                    try {
+                        const videoData = await ytvideo.downloadVideo(query, 'YouTube Video', downloadId);
 
-                // Send from local file
-                await sock.sendMessage(msg.key.remoteJid, {
-                    video: { url: videoData.filePath },
-                    caption: `✅ *Download Complete!*\n\n🎬 ${videoData.title}`,
-                    mimetype: 'video/mp4'
-                }, { quoted: msg });
+                        // Send from local file
+                        await sock.sendMessage(msg.key.remoteJid, {
+                            video: { url: videoData.filePath },
+                            caption: `✅ *Download Complete!*\n\n🎬 ${videoData.title}`,
+                            mimetype: 'video/mp4'
+                        }, { quoted: msg });
 
-                // Delete file after sending
-                await videoData.cleanup();
+                        // Delete file after sending
+                        setTimeout(() => {
+                            videoData.cleanup();
+                        }, 5000);
+
+                    } catch (error) {
+                        console.error('Video download failed:', error);
+                        await sock.sendMessage(msg.key.remoteJid, {
+                            text: `❌ *Download Failed!*\n\n` +
+                                  `Error: ${error.message}\n\n` +
+                                  `💡 Try again or use a different video`
+                        });
+                    }
+                })();
+
                 return;
             }
 
@@ -3027,39 +3045,47 @@ ${config.prefix}setvar <key> <value>
 
                 if (!isNaN(num) && num >= 1 && num <= videoSession.results.length) {
                     const selectedVideo = videoSession.results[num - 1];
+                    const downloadId = `search_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-                    try {
-                        // Send download message
-                        await sock.sendMessage(chatId, {
-                            text: ytvideo.formatDownloadMessage(selectedVideo.title)
-                        });
+                    // Send download message
+                    await sock.sendMessage(chatId, {
+                        text: ytvideo.formatDownloadMessage(selectedVideo.title) +
+                              `\n\n💡 Large videos may take a few minutes\n⚠️ Bot will continue to respond while downloading`
+                    });
 
-                        // Download video to file
-                        const videoData = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title);
+                    // Clear session immediately
+                    ytvideo.clearSearchSession(storageKeyVidReply);
 
-                        // Send the video file from local file
-                        await sock.sendMessage(chatId, {
-                            video: { url: videoData.filePath },
-                            caption: `✅ *Download Complete!*\n\n` +
-                                    `🎬 ${videoData.title}\n` +
-                                    `👤 ${selectedVideo.author.name}`,
-                            mimetype: 'video/mp4'
-                        }, { quoted: msg });
+                    // Download in background without blocking
+                    (async () => {
+                        try {
+                            // Download video to file
+                            const videoData = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title, downloadId);
 
-                        // Delete file after sending
-                        await videoData.cleanup();
+                            // Send the video file from local file
+                            await sock.sendMessage(chatId, {
+                                video: { url: videoData.filePath },
+                                caption: `✅ *Download Complete!*\n\n` +
+                                        `🎬 ${videoData.title}\n` +
+                                        `👤 ${selectedVideo.author.name}`,
+                                mimetype: 'video/mp4'
+                            }, { quoted: msg });
 
-                        // Clear session
-                        ytvideo.clearSearchSession(storageKeyVidReply);
+                            // Delete file after sending
+                            setTimeout(() => {
+                                videoData.cleanup();
+                            }, 5000);
 
-                    } catch (error) {
-                        console.error('❌ Video download error:', error);
-                        await sock.sendMessage(chatId, {
-                            text: `❌ Failed to download video!\n\n` +
-                                  `Error: ${error.message}\n\n` +
-                                  `💡 Please try searching again with ${config.prefix}ytvideo`
-                        });
-                    }
+                        } catch (error) {
+                            console.error('❌ Video download error:', error);
+                            await sock.sendMessage(chatId, {
+                                text: `❌ Failed to download video!\n\n` +
+                                      `Error: ${error.message}\n\n` +
+                                      `💡 Please try searching again with ${config.prefix}ytvideo`
+                            });
+                        }
+                    })();
+
                     return; // Don't process as a command
                 }
             }
