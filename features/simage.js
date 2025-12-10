@@ -41,14 +41,38 @@ const convertStickerToImage = async (sock, quotedMessage, chatId) => {
         await fsPromises.writeFile(stickerFilePath, buffer);
 
         if (isAnimated) {
-            // Convert animated sticker to MP4 video
+            // Convert animated sticker: WebP → GIF → MP4
+            const gifPath = path.join(tempDir, `sticker_${Date.now()}.gif`);
             const outputVideoPath = path.join(tempDir, `converted_video_${Date.now()}.mp4`);
 
+            // Step 1: Convert WebP to GIF using gif2webp in reverse (or ffmpeg with libwebp_anim)
             await new Promise((resolve, reject) => {
-                const ffmpegCmd = `ffmpeg -i "${stickerFilePath}" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "${outputVideoPath}"`;
-                exec(ffmpegCmd, (error) => {
+                // Use ffmpeg to convert webp to gif first
+                const webpToGifCmd = `ffmpeg -i "${stickerFilePath}" -vf "split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" "${gifPath}"`;
+                exec(webpToGifCmd, (error, stdout, stderr) => {
                     if (error) {
-                        console.error('FFmpeg error:', error);
+                        console.error('WebP to GIF conversion error:', error.message);
+                        // If this fails, try direct conversion
+                        const directCmd = `ffmpeg -i "${stickerFilePath}" "${gifPath}"`;
+                        exec(directCmd, (err2) => {
+                            if (err2) {
+                                reject(error); // Use original error
+                            } else {
+                                resolve();
+                            }
+                        });
+                    } else {
+                        resolve();
+                    }
+                });
+            });
+
+            // Step 2: Convert GIF to MP4
+            await new Promise((resolve, reject) => {
+                const gifToMp4Cmd = `ffmpeg -i "${gifPath}" -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p -movflags +faststart -preset fast "${outputVideoPath}"`;
+                exec(gifToMp4Cmd, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error('GIF to MP4 conversion error:', error.message);
                         reject(error);
                     } else {
                         resolve();
@@ -64,6 +88,7 @@ const convertStickerToImage = async (sock, quotedMessage, chatId) => {
             });
 
             scheduleFileDeletion(stickerFilePath);
+            scheduleFileDeletion(gifPath);
             scheduleFileDeletion(outputVideoPath);
 
         } else {
