@@ -1,10 +1,7 @@
 # Session data
 sessions/
 auth_info_baileys/
-temp/
-tmp/
-database/
-data/
+
 
 
 # Node modules
@@ -29,3 +26,6 @@ nul
 database/
 downloads/
 docs/
+temp/
+tmp/
+data/
