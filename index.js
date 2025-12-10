@@ -1566,7 +1566,7 @@ ${config.prefix}setvar <key> <value>
             // Check if it's a YouTube URL
             if (youtube.isYTUrl(query)) {
                 await sock.sendMessage(msg.key.remoteJid, {
-                    text: `🎬 *DOWNLOADING VIDEO*\n\n⏳ Please wait, downloading video...\n📹 Quality: 720p MP4...`
+                    text: `🎬 *DOWNLOADING VIDEO*\n\n⏳ Please wait, downloading video...\n📹 Quality: Best Available (up to 1080p)...`
                 });
 
                 const videoData = await ytvideo.downloadVideo(query, 'YouTube Video');
