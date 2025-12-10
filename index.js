@@ -54,6 +54,7 @@ const { extractAudioToMp3, reverseMedia } = require('./lib/audio');
 const registerApkCommand = require('./features/apk');
 const registerEmojimixCommand = require('./features/emojimix');
 const saveStatus = require('./lib/saveStatus');
+const registerEphotoCommands = require('./features/ephoto');
 
 // Bot Configuration from .env
 const config = {
@@ -3465,8 +3466,8 @@ ${config.prefix}setvar <key> <value>
     });
 
     // Register group commands
-    try {
-      registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings });
+    try { 
+      registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings }); 
     }
     catch (e) {
       console.error('❌ Failed to register group commands:', e && e.message ? e.message : e);
@@ -3732,6 +3733,7 @@ ${config.prefix}setvar <key> <value>
     try {
       registerApkCommand({ registerCommand });
       registerEmojimixCommand({ registerCommand });
+      registerEphotoCommands({ registerCommand });
       registerCommand('autostatus', 'Enable or disable auto status view/react', async (sock, msg, args) => {
         const senderJid = msg.key.participant || msg.key.remoteJid;
         const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
