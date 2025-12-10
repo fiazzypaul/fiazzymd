@@ -720,6 +720,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}light
 │ ${config.prefix}lightstyles
 │ ${config.prefix}lightstyle
+│ ${config.prefix}tattoo
 │ ${config.prefix}impressive
 │ ${config.prefix}leaves
 │ ${config.prefix}sand
