@@ -54,6 +54,7 @@ async function fetchTriviaQuestion(difficulty = null, category = null) {
         const question = response.data.results[0];
 
         // Decode HTML entities
+        question.category = decodeHTML(question.category);
         question.question = decodeHTML(question.question);
         question.correct_answer = decodeHTML(question.correct_answer);
         question.incorrect_answers = question.incorrect_answers.map(ans => decodeHTML(ans));

@@ -3252,20 +3252,28 @@ ${config.prefix}setvar <key> <value>
                 }
             }
 
-            // Check for trivia answer
+            // Check for trivia answer (allow all users including owner)
             const triviaSession = trivia.getSession(chatId);
             if (triviaSession && !messageText.startsWith(config.prefix)) {
-                const userAnswer = messageText.trim();
+                // Ignore bot's own trivia questions and results (they contain these patterns)
+                const isBotTriviaMessage = messageText.includes('*TRIVIA CHALLENGE*') ||
+                                          messageText.includes('*CORRECT!*') ||
+                                          messageText.includes('*INCORRECT!*') ||
+                                          messageText.includes("*Time's Up!*");
 
-                // Check the answer
-                const result = trivia.checkAnswer(chatId, userAnswer);
+                if (!isBotTriviaMessage) {
+                    const userAnswer = messageText.trim();
 
-                // Send result message
-                await sock.sendMessage(chatId, {
-                    text: result.message
-                }, { quoted: msg });
+                    // Check the answer
+                    const result = trivia.checkAnswer(chatId, userAnswer);
 
-                return; // Don't process as a command
+                    // Send result message
+                    await sock.sendMessage(chatId, {
+                        text: result.message
+                    }, { quoted: msg });
+
+                    return; // Don't process as a command
+                }
             }
 
             // Check for tic-tac-toe move (only if not a command)
