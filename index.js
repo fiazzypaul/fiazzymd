@@ -32,6 +32,7 @@ const fancytext = require('./features/fancytext');
 const createPermissions = require('./permissions');
 const songs = require('./features/songs');
 const ytvideo = require('./features/ytvideo');
+const youtube = require('./lib/youtube');
 const tiktokDownloader = require('./lib/tiktok');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
 const { searchAnime, getTopAnime, getSeasonalAnime, getRandomAnime, formatAnimeResults, formatAnimeDetails } = require('./features/anime');
@@ -1471,11 +1472,11 @@ ${config.prefix}setvar <key> <value>
         if (args.length === 0) {
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `🎵 *SONG DOWNLOADER*\n\n` +
-                      `*Usage:* ${config.prefix}song <song name>\n\n` +
+                      `*Usage:* ${config.prefix}song <song name or YouTube URL>\n\n` +
                       `*Examples:*\n` +
                       `${config.prefix}song smooth criminal\n` +
                       `${config.prefix}song shape of you\n` +
-                      `${config.prefix}song bohemian rhapsody\n\n` +
+                      `${config.prefix}song https://youtu.be/xyz123\n\n` +
                       `💡 After search, reply with a number (1-5) to download`
             });
             return;
@@ -1485,11 +1486,32 @@ ${config.prefix}setvar <key> <value>
         const userId = msg.key.participant || msg.key.remoteJid;
 
         try {
+            // Check if it's a YouTube URL
+            if (youtube.isYTUrl(query)) {
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `🎵 *DOWNLOADING SONG*\n\n⏳ Please wait, downloading audio...\n🎧 Converting to MP3 format...`
+                });
+
+                const audioData = await songs.downloadAudio(query, 'YouTube Audio');
+
+                await sock.sendMessage(msg.key.remoteJid, {
+                    audio: { url: audioData.url },
+                    mimetype: 'audio/mpeg',
+                    fileName: `${audioData.title}.mp3`,
+                    ptt: false
+                }, { quoted: msg });
+
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `✅ *Download Complete!*\n\n🎵 ${audioData.title}\n👤 ${audioData.channel}`
+                });
+                return;
+            }
+
+            // Search for songs
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...`
             });
 
-            // Search for songs
             const results = await songs.searchYouTube(query, 5);
 
             if (!results || results.length === 0) {
@@ -1527,11 +1549,11 @@ ${config.prefix}setvar <key> <value>
         if (args.length === 0) {
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `🎬 *YOUTUBE VIDEO DOWNLOADER*\n\n` +
-                      `*Usage:* ${config.prefix}ytvideo <search query>\n\n` +
+                      `*Usage:* ${config.prefix}ytvideo <search query or YouTube URL>\n\n` +
                       `*Examples:*\n` +
                       `${config.prefix}ytvideo funny cats\n` +
                       `${config.prefix}ytvideo cooking tutorial\n` +
-                      `${config.prefix}ytvideo game highlights\n\n` +
+                      `${config.prefix}ytvideo https://youtu.be/xyz123\n\n` +
                       `💡 After search, reply with a number (1-5) to download`
             });
             return;
@@ -1541,11 +1563,27 @@ ${config.prefix}setvar <key> <value>
         const userId = msg.key.participant || msg.key.remoteJid;
 
         try {
+            // Check if it's a YouTube URL
+            if (youtube.isYTUrl(query)) {
+                await sock.sendMessage(msg.key.remoteJid, {
+                    text: `🎬 *DOWNLOADING VIDEO*\n\n⏳ Please wait, downloading video...\n📹 Quality: 720p MP4...`
+                });
+
+                const videoData = await ytvideo.downloadVideo(query, 'YouTube Video');
+
+                await sock.sendMessage(msg.key.remoteJid, {
+                    video: { url: videoData.url },
+                    caption: `✅ *Download Complete!*\n\n🎬 ${videoData.title}`,
+                    mimetype: 'video/mp4'
+                }, { quoted: msg });
+                return;
+            }
+
+            // Search for videos
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...`
             });
 
-            // Search for videos
             const results = await ytvideo.searchYouTube(query, 5);
 
             if (!results || results.length === 0) {

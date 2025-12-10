@@ -1,7 +1,5 @@
 const youtube = require('../lib/youtube');
 const ytmp3 = require('../lib/ytmp3');
-const fs = require('fs');
-const path = require('path');
 
 // Store user search sessions
 const searchSessions = new Map();
@@ -14,7 +12,7 @@ const searchSessions = new Map();
  */
 async function searchYouTube(query, limit = 5) {
     try {
-        const results = await youtube.constructor.search(query);
+        const results = await youtube.search(query);
         return results.slice(0, limit);
     } catch (error) {
         console.error('YouTube search error:', error);
