@@ -40,6 +40,12 @@ async function textmakerCommand(sock, msg, text, type) {
                 case 'matrix':
                     result = await mumaker.ephoto("https://en.ephoto360.com/matrix-text-effect-154.html", text);
                     break;
+                case 'luxurygold':
+                    result = await mumaker.ephoto("https://en.ephoto360.com/create-a-luxury-gold-text-effect-online-594.html", text);
+                    break;
+                case 'chrome':
+                    result = await mumaker.ephoto("https://en.ephoto360.com/glossy-chrome-text-effect-online-424.html", text);
+                    break;
                 case 'light':
                     result = await mumaker.ephoto("https://en.ephoto360.com/light-text-effect-futuristic-technology-style-648.html", text);
                     break;

@@ -711,6 +711,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}neon
 │ ${config.prefix}glitch
 │ ${config.prefix}matrix
+│ ${config.prefix}luxurygold
+│ ${config.prefix}chrome
 │ ${config.prefix}thunder
 │ ${config.prefix}ice
 │ ${config.prefix}snow
@@ -733,6 +735,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}frost
 │ ${config.prefix}deadpool
 │ ${config.prefix}neonavatar
+│ ${config.prefix}game1
+│ ${config.prefix}game2
 │ ${config.prefix}dbz
 │ ${config.prefix}naruto
 │ ${config.prefix}pixelglitch
@@ -1732,6 +1736,16 @@ ${config.prefix}setvar <key> <value>
     registerCommand('matrix', 'Generate matrix style text effect', async (sock, msg, args) => {
         const text = args.join(' ');
         await textmaker(sock, msg, text, 'matrix');
+    });
+
+    registerCommand('luxurygold', 'Generate luxury gold text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'luxurygold');
+    });
+
+    registerCommand('chrome', 'Generate glossy chrome text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'chrome');
     });
 
     registerCommand('thunder', 'Generate thunder text effect', async (sock, msg, args) => {

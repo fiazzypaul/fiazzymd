@@ -101,6 +101,34 @@ function registerEphotoCommands({ registerCommand }) {
       await sock.sendMessage(chatId, { text: `❌ Failed to generate tattoo: ${e.message}` });
     }
   });
+  registerCommand('game1', 'Generate FPS team gaming logo (random style)', async (sock, msg, args) => {
+    const chatId = msg.key.remoteJid;
+    const text = args.join(' ').trim();
+    if (!text) { await sock.sendMessage(chatId, { text: '❌ Usage: .game1 <text>' }); return; }
+    await sock.sendMessage(chatId, { text: '🎮 Generating gaming logo... ⏳' });
+    try {
+      const { default: mumaker } = await import('mumaker');
+      const result = await mumaker.ephoto('https://en.ephoto360.com/free-gaming-logo-maker-for-fps-game-team-546.html', text);
+      if (!result || !result.image) { throw new Error('No image URL received'); }
+      await sock.sendMessage(chatId, { image: { url: result.image }, caption: `✅ GAME LOGO (FPS)\n\n📝 ${text}` }, { quoted: msg });
+    } catch (e) {
+      await sock.sendMessage(chatId, { text: `❌ Failed to generate game1: ${e.message}` });
+    }
+  });
+  registerCommand('game2', 'Generate assassin style gaming logo (random style)', async (sock, msg, args) => {
+    const chatId = msg.key.remoteJid;
+    const text = args.join(' ').trim();
+    if (!text) { await sock.sendMessage(chatId, { text: '❌ Usage: .game2 <text>' }); return; }
+    await sock.sendMessage(chatId, { text: '🎮 Generating gaming logo... ⏳' });
+    try {
+      const { default: mumaker } = await import('mumaker');
+      const result = await mumaker.ephoto('https://en.ephoto360.com/create-logo-team-logo-gaming-assassin-style-574.html', text);
+      if (!result || !result.image) { throw new Error('No image URL received'); }
+      await sock.sendMessage(chatId, { image: { url: result.image }, caption: `✅ GAME LOGO (ASSASSIN)\n\n📝 ${text}` }, { quoted: msg });
+    } catch (e) {
+      await sock.sendMessage(chatId, { text: `❌ Failed to generate game2: ${e.message}` });
+    }
+  });
 }
 
 module.exports = registerEphotoCommands;
