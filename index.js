@@ -2773,29 +2773,22 @@ ${config.prefix}setvar <key> <value>
                             text: songs.formatDownloadMessage(selectedVideo.title)
                         });
 
-                        // Download the audio
-                        const filePath = await songs.downloadAudio(selectedVideo.url, selectedVideo.title);
+                        // Get download URL
+                        const audioData = await songs.downloadAudio(selectedVideo.url, selectedVideo.title);
 
-                        // Send the audio file
+                        // Send the audio file directly from URL
                         await sock.sendMessage(chatId, {
-                            audio: fs.readFileSync(filePath),
+                            audio: { url: audioData.url },
                             mimetype: 'audio/mpeg',
-                            fileName: path.basename(filePath),
+                            fileName: `${audioData.title}.mp3`,
                             ptt: false
                         }, { quoted: msg });
 
                         await sock.sendMessage(chatId, {
                             text: `✅ *Download Complete!*\n\n` +
-                                  `🎵 ${selectedVideo.title}\n` +
-                                  `👤 ${selectedVideo.author.name}`
+                                  `🎵 ${audioData.title}\n` +
+                                  `👤 ${audioData.channel || selectedVideo.author.name}`
                         });
-
-                        // Clean up
-                        try {
-                            fs.unlinkSync(filePath);
-                        } catch (e) {
-                            console.error('Failed to delete temp file:', e);
-                        }
 
                         // Clear session
                         songs.clearSearchSession(storageKeySongReply);
@@ -2828,24 +2821,17 @@ ${config.prefix}setvar <key> <value>
                             text: ytvideo.formatDownloadMessage(selectedVideo.title)
                         });
 
-                        // Download the video
-                        const filePath = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title);
+                        // Get download URL
+                        const videoData = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title);
 
-                        // Send the video file
+                        // Send the video file directly from URL
                         await sock.sendMessage(chatId, {
-                            video: fs.readFileSync(filePath),
+                            video: { url: videoData.url },
                             caption: `✅ *Download Complete!*\n\n` +
-                                    `🎬 ${selectedVideo.title}\n` +
+                                    `🎬 ${videoData.title}\n` +
                                     `👤 ${selectedVideo.author.name}`,
                             mimetype: 'video/mp4'
                         }, { quoted: msg });
-
-                        // Clean up
-                        try {
-                            fs.unlinkSync(filePath);
-                        } catch (e) {
-                            console.error('Failed to delete temp file:', e);
-                        }
 
                         // Clear session
                         ytvideo.clearSearchSession(storageKeyVidReply);

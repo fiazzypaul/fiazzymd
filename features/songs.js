@@ -1,4 +1,4 @@
-const yts = require('yt-search');
+const youtube = require('../lib/youtube');
 const ytmp3 = require('../lib/ytmp3');
 const fs = require('fs');
 const path = require('path');
@@ -14,8 +14,8 @@ const searchSessions = new Map();
  */
 async function searchYouTube(query, limit = 5) {
     try {
-        const results = await yts(query);
-        return results.videos.slice(0, limit);
+        const results = await youtube.constructor.search(query);
+        return results.slice(0, limit);
     } catch (error) {
         console.error('YouTube search error:', error);
         throw new Error('Failed to search YouTube');
@@ -49,31 +49,18 @@ function formatSearchResults(results, query) {
 }
 
 /**
- * Download YouTube audio
+ * Get YouTube audio download data
  * @param {string} url - YouTube video URL
  * @param {string} title - Video title (for filename)
- * @returns {Promise<string>} Path to downloaded file
+ * @returns {Promise<Object>} { url, title, thumbnail, channel }
  */
 async function downloadAudio(url, title) {
     try {
-        const downloadsDir = path.join(__dirname, '..', 'downloads');
-        if (!fs.existsSync(downloadsDir)) {
-            fs.mkdirSync(downloadsDir, { recursive: true });
-        }
-
-        // Sanitize filename
-        const sanitizedTitle = title
-            .replace(/[^a-zA-Z0-9\s-]/g, '')
-            .replace(/\s+/g, '_')
-            .substring(0, 50);
-
-        const outputPath = path.join(downloadsDir, `${sanitizedTitle}.mp3`);
-
-        await ytmp3(url, outputPath);
-        return outputPath;
+        const result = await ytmp3(url);
+        return result;
     } catch (error) {
         console.error('Download error:', error);
-        throw new Error('Failed to download audio');
+        throw new Error('Failed to get download link');
     }
 }
 
