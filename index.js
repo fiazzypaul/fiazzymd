@@ -1620,48 +1620,20 @@ ${config.prefix}setvar <key> <value>
         try {
             // Check if it's a YouTube URL
             if (youtube.isYTUrl(query)) {
-                const downloadId = `vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
                 await sock.sendMessage(msg.key.remoteJid, {
-                    text: `🎬 *DOWNLOADING VIDEO*\n\n⏳ Please wait, downloading video...\n📹 Quality: Best Available (up to 1080p)...\n\n💡 Large videos may take a few minutes\n⚠️ Bot will continue to respond while downloading`
+                    text: `🎬 *STREAMING VIDEO*\n\n🔍 Getting video information...\n📹 Quality: Best Available (up to 1080p)...\n\n💡 Streaming directly without saving to disk\n⚠️ Bot will continue to respond while streaming`
                 });
 
-                // Download in background without blocking
+                // Stream video in background without blocking
                 (async () => {
-                    let videoData = null;
                     try {
-                        videoData = await ytvideo.downloadVideo(query, 'YouTube Video', downloadId);
-
-                        // Check file size before sending
-                        const stats = fs.statSync(videoData.filePath);
-                        const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
-
-                        console.log(`📊 Video size: ${fileSizeMB}MB`);
-
-                        // Send from local file
-                        await sock.sendMessage(msg.key.remoteJid, {
-                            video: { url: videoData.filePath },
-                            caption: `✅ *Download Complete!*\n\n🎬 ${videoData.title}\n📦 Size: ${fileSizeMB}MB`,
-                            mimetype: 'video/mp4'
-                        }, { quoted: msg });
+                        // Use smart streaming (no disk usage)
+                        await ytvideo.sendVideoSmart(sock, msg.key.remoteJid, query, msg, {});
 
                         console.log('✅ Video sent successfully');
 
-                        // Delete file immediately after sending
-                        await videoData.cleanup();
-
                     } catch (error) {
-                        console.error('Video download/send failed:', error);
-
-                        // Clean up file if download succeeded but send failed
-                        if (videoData && videoData.cleanup) {
-                            try {
-                                await videoData.cleanup();
-                                console.log('🗑️ Cleaned up failed video file');
-                            } catch (cleanupError) {
-                                console.error('Cleanup error:', cleanupError);
-                            }
-                        }
+                        console.error('Video streaming failed:', error);
 
                         // Determine error message
                         let errorMsg = error.message;
@@ -3182,57 +3154,27 @@ ${config.prefix}setvar <key> <value>
 
                 if (!isNaN(num) && num >= 1 && num <= videoSession.results.length) {
                     const selectedVideo = videoSession.results[num - 1];
-                    const downloadId = `search_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-                    // Send download message
+                    // Send streaming message
                     await sock.sendMessage(chatId, {
-                        text: ytvideo.formatDownloadMessage(selectedVideo.title) +
-                              `\n\n💡 Large videos may take a few minutes\n⚠️ Bot will continue to respond while downloading`
+                        text: `🎬 *STREAMING VIDEO*\n\n📝 Title: ${selectedVideo.title}\n\n🔍 Getting video information...\n⏳ Please wait...\n\n💡 Streaming directly without saving to disk\n⚠️ Bot will continue to respond while streaming`
                     });
 
                     // Clear session immediately
                     ytvideo.clearSearchSession(storageKeyVidReply);
 
-                    // Download in background without blocking
+                    // Stream video in background without blocking
                     (async () => {
-                        let videoData = null;
                         try {
-                            // Download video to file
-                            videoData = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title, downloadId);
-
-                            // Check file size before sending
-                            const stats = fs.statSync(videoData.filePath);
-                            const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
-
-                            console.log(`📊 Video size: ${fileSizeMB}MB`);
-
-                            // Send the video file from local file
-                            await sock.sendMessage(chatId, {
-                                video: { url: videoData.filePath },
-                                caption: `✅ *Download Complete!*\n\n` +
-                                        `🎬 ${videoData.title}\n` +
-                                        `👤 ${selectedVideo.author.name}\n` +
-                                        `📦 Size: ${fileSizeMB}MB`,
-                                mimetype: 'video/mp4'
-                            }, { quoted: msg });
+                            // Use smart streaming (no disk usage)
+                            await ytvideo.sendVideoSmart(sock, chatId, selectedVideo.url, msg, {
+                                author: selectedVideo.author.name
+                            });
 
                             console.log('✅ Video sent successfully');
 
-                            // Delete file immediately after sending
-                            await videoData.cleanup();
-
                         } catch (error) {
-                            console.error('❌ Video download error:', error);
-
-                            // Clean up file if download succeeded but send failed
-                            if (videoData && videoData.cleanup) {
-                                try {
-                                    await videoData.cleanup();
-                                    console.log('🗑️ Cleaned up failed video file');
-                                } catch (cleanupError) {
-                                    console.error('Cleanup error:', cleanupError);
-                                }
-                            }
+                            console.error('❌ Video streaming error:', error);
 
                             // Determine error message
                             let errorMsg = error.message;
