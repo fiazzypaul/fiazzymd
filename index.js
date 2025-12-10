@@ -55,6 +55,8 @@ const registerApkCommand = require('./features/apk');
 const registerEmojimixCommand = require('./features/emojimix');
 const saveStatus = require('./lib/saveStatus');
 const registerEphotoCommands = require('./features/ephoto');
+const { flirtCommand } = require('./features/flirt');
+const { dareCommand } = require('./features/dare');
 
 // Bot Configuration from .env
 const config = {
@@ -679,6 +681,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}restart
 │ ${config.prefix}update
 │ ${config.prefix}autostatus
+│ ${config.prefix}flirt
+│ ${config.prefix}dare
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -802,11 +806,11 @@ ${config.botMode === 'private' ? '🔒 Private Mode' : '🌐 Public Mode'}`;
                         }
                     }
                 });
-                console.log('✅ Menu sent successfully with image');
-            } else {
-                // Send text only if image doesn't exist
-                console.log('📤 Sending menu as text (no image found)...');
-                await sock.sendMessage(msg.key.remoteJid, { 
+            console.log('✅ Menu sent successfully with image');
+        } else {
+            // Send text only if image doesn't exist
+            console.log('📤 Sending menu as text (no image found)...');
+            await sock.sendMessage(msg.key.remoteJid, { 
                     text: menuText,
                     contextInfo: {
                         forwardingScore: 1,
@@ -818,8 +822,8 @@ ${config.botMode === 'private' ? '🔒 Private Mode' : '🌐 Public Mode'}`;
                         }
                     }
                 });
-                console.log('✅ Menu sent successfully as text');
-            }
+            console.log('✅ Menu sent successfully as text');
+        }
         } catch (error) {
             // Fallback to text if image fails
             console.error('⚠️  Failed to send menu with image:', error.message);
@@ -3737,6 +3741,14 @@ ${config.prefix}setvar <key> <value>
       registerApkCommand({ registerCommand });
       registerEmojimixCommand({ registerCommand });
       registerEphotoCommands({ registerCommand });
+      registerCommand('flirt', 'Send a random flirt message', async (sock, msg) => {
+        const chatId = msg.key.remoteJid;
+        await flirtCommand(sock, chatId, msg);
+      });
+      registerCommand('dare', 'Send a random dare', async (sock, msg) => {
+        const chatId = msg.key.remoteJid;
+        await dareCommand(sock, chatId, msg);
+      });
       registerCommand('autostatus', 'Enable or disable auto status view/react', async (sock, msg, args) => {
         const senderJid = msg.key.participant || msg.key.remoteJid;
         const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');

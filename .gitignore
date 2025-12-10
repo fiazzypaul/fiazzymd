@@ -1,6 +1,11 @@
 # Session data
 sessions/
 auth_info_baileys/
+temp/
+tmp/
+database/
+data/
+
 
 # Node modules
 node_modules/
