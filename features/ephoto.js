@@ -87,6 +87,20 @@ function registerEphotoCommands({ registerCommand }) {
   registerCommand('lightstyles', 'List styles for light effect', async (sock, msg) => { await listLightStyles(sock, msg); });
   registerCommand('lightstyle', 'Generate light text with selected style number', async (sock, msg, args) => { await generateLightWithStyle(sock, msg, args); });
   registerCommand('neonavatar', 'Create blue neon avatar from replied image', async (sock, msg, args) => { await generateNeonAvatar(sock, msg, args); });
+  registerCommand('tattoo', 'Make tattoo effect by name (random style)', async (sock, msg, args) => {
+    const chatId = msg.key.remoteJid;
+    const text = args.join(' ').trim();
+    if (!text) { await sock.sendMessage(chatId, { text: '❌ Usage: .tattoo <text>' }); return; }
+    await sock.sendMessage(chatId, { text: '🎨 Generating tattoo effect... ⏳' });
+    try {
+      const { default: mumaker } = await import('mumaker');
+      const result = await mumaker.ephoto('https://en.ephoto360.com/make-tattoos-online-by-your-name-309.html', text);
+      if (!result || !result.image) { throw new Error('No image URL received'); }
+      await sock.sendMessage(chatId, { image: { url: result.image }, caption: `✅ TATTOO\n\n📝 ${text}` }, { quoted: msg });
+    } catch (e) {
+      await sock.sendMessage(chatId, { text: `❌ Failed to generate tattoo: ${e.message}` });
+    }
+  });
 }
 
 module.exports = registerEphotoCommands;
