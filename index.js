@@ -41,6 +41,8 @@ const { updateGroupProfilePicture } = require('./features/gpp');
 const tictactoe = require('./features/tictactoe');
 const wcg = require('./features/wcg');
 const textmaker = require('./features/textmaker');
+const trivia = require('./features/trivia');
+const weather = require('./features/weather');
 const jids = require('./features/jids');
 const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
@@ -741,6 +743,14 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╰──────────────────────╯
 │ ${config.prefix}ttt
 │ ${config.prefix}wcg
+│ ${config.prefix}trivia
+╰──────────────────────╯
+
+╭──────────────────────╮
+│  🌤️ *WEATHER & INFO*  │
+╰──────────────────────╯
+│ ${config.prefix}weather
+│ ${config.prefix}forecast
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1618,27 +1628,51 @@ ${config.prefix}setvar <key> <value>
 
                 // Download in background without blocking
                 (async () => {
+                    let videoData = null;
                     try {
-                        const videoData = await ytvideo.downloadVideo(query, 'YouTube Video', downloadId);
+                        videoData = await ytvideo.downloadVideo(query, 'YouTube Video', downloadId);
+
+                        // Check file size before sending
+                        const stats = fs.statSync(videoData.filePath);
+                        const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+
+                        console.log(`📊 Video size: ${fileSizeMB}MB`);
 
                         // Send from local file
                         await sock.sendMessage(msg.key.remoteJid, {
                             video: { url: videoData.filePath },
-                            caption: `✅ *Download Complete!*\n\n🎬 ${videoData.title}`,
+                            caption: `✅ *Download Complete!*\n\n🎬 ${videoData.title}\n📦 Size: ${fileSizeMB}MB`,
                             mimetype: 'video/mp4'
                         }, { quoted: msg });
 
-                        // Delete file after sending
-                        setTimeout(() => {
-                            videoData.cleanup();
-                        }, 5000);
+                        console.log('✅ Video sent successfully');
+
+                        // Delete file immediately after sending
+                        await videoData.cleanup();
 
                     } catch (error) {
-                        console.error('Video download failed:', error);
+                        console.error('Video download/send failed:', error);
+
+                        // Clean up file if download succeeded but send failed
+                        if (videoData && videoData.cleanup) {
+                            try {
+                                await videoData.cleanup();
+                                console.log('🗑️ Cleaned up failed video file');
+                            } catch (cleanupError) {
+                                console.error('Cleanup error:', cleanupError);
+                            }
+                        }
+
+                        // Determine error message
+                        let errorMsg = error.message;
+                        if (error.code === 'ENOSPC') {
+                            errorMsg = 'Not enough disk space available. Please free up some space and try again.';
+                        }
+
                         await sock.sendMessage(msg.key.remoteJid, {
                             text: `❌ *Download Failed!*\n\n` +
-                                  `Error: ${error.message}\n\n` +
-                                  `💡 Try again or use a different video`
+                                  `Error: ${errorMsg}\n\n` +
+                                  `💡 Try a shorter video or free up disk space`
                         });
                     }
                 })();
@@ -1827,6 +1861,109 @@ ${config.prefix}setvar <key> <value>
     registerCommand('arrow', 'Generate multicolored arrow signature', async (sock, msg, args) => {
         const text = args.join(' ');
         await textmaker(sock, msg, text, 'arrow');
+    });
+
+    // Register Trivia command
+    registerCommand('trivia', 'Play trivia quiz game', async (sock, msg, args) => {
+        const chatId = msg.key.remoteJid;
+        const difficulty = args[0]; // optional: easy, medium, hard
+
+        try {
+            // Check if user wants to see categories/help
+            if (difficulty === 'help' || difficulty === 'categories') {
+                const helpMessage = trivia.getCategories();
+                await sock.sendMessage(chatId, { text: helpMessage });
+                return;
+            }
+
+            // Start a new trivia question
+            const triviaMessage = await trivia.startTrivia(chatId, difficulty);
+
+            if (triviaMessage) {
+                await sock.sendMessage(chatId, { text: triviaMessage });
+            }
+        } catch (error) {
+            console.error('Trivia error:', error);
+            await sock.sendMessage(chatId, {
+                text: `❌ Failed to start trivia!\n\nError: ${error.message}\n\n💡 Try again with \`${config.prefix}trivia\``
+            });
+        }
+    });
+
+    // Register Weather command
+    registerCommand('weather', 'Get current weather for a city', async (sock, msg, args) => {
+        const chatId = msg.key.remoteJid;
+        const city = args.join(' ');
+
+        if (!city || city.trim().length === 0) {
+            await sock.sendMessage(chatId, {
+                text: `🌤️ *WEATHER COMMAND*\n\n` +
+                      `*Usage:* ${config.prefix}weather <city name>\n\n` +
+                      `*Examples:*\n` +
+                      `${config.prefix}weather London\n` +
+                      `${config.prefix}weather New York\n` +
+                      `${config.prefix}weather Tokyo,JP\n\n` +
+                      `💡 You can specify country code for accuracy:\n` +
+                      `${config.prefix}weather Paris,FR`
+            });
+            return;
+        }
+
+        try {
+            await sock.sendMessage(chatId, {
+                text: `🌤️ Fetching weather data for *${city}*...\n\n⏳ Please wait...`
+            });
+
+            const weatherData = await weather.getWeather(city);
+            const weatherMessage = weather.formatWeather(weatherData);
+
+            await sock.sendMessage(chatId, { text: weatherMessage }, { quoted: msg });
+        } catch (error) {
+            console.error('Weather error:', error);
+            await sock.sendMessage(chatId, {
+                text: `❌ Failed to fetch weather!\n\n` +
+                      `Error: ${error.message}\n\n` +
+                      `💡 Make sure the city name is correct\n` +
+                      `Example: ${config.prefix}weather London`
+            });
+        }
+    });
+
+    // Register Forecast command
+    registerCommand('forecast', 'Get 5-day weather forecast for a city', async (sock, msg, args) => {
+        const chatId = msg.key.remoteJid;
+        const city = args.join(' ');
+
+        if (!city || city.trim().length === 0) {
+            await sock.sendMessage(chatId, {
+                text: `📅 *FORECAST COMMAND*\n\n` +
+                      `*Usage:* ${config.prefix}forecast <city name>\n\n` +
+                      `*Examples:*\n` +
+                      `${config.prefix}forecast London\n` +
+                      `${config.prefix}forecast New York\n` +
+                      `${config.prefix}forecast Tokyo,JP`
+            });
+            return;
+        }
+
+        try {
+            await sock.sendMessage(chatId, {
+                text: `📅 Fetching 5-day forecast for *${city}*...\n\n⏳ Please wait...`
+            });
+
+            const forecastData = await weather.getForecast(city);
+            const forecastMessage = weather.formatForecast(forecastData);
+
+            await sock.sendMessage(chatId, { text: forecastMessage }, { quoted: msg });
+        } catch (error) {
+            console.error('Forecast error:', error);
+            await sock.sendMessage(chatId, {
+                text: `❌ Failed to fetch forecast!\n\n` +
+                      `Error: ${error.message}\n\n` +
+                      `💡 Make sure the city name is correct\n` +
+                      `Example: ${config.prefix}forecast London`
+            });
+        }
     });
 
     /* moved to features/group.js */
@@ -3058,36 +3195,77 @@ ${config.prefix}setvar <key> <value>
 
                     // Download in background without blocking
                     (async () => {
+                        let videoData = null;
                         try {
                             // Download video to file
-                            const videoData = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title, downloadId);
+                            videoData = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title, downloadId);
+
+                            // Check file size before sending
+                            const stats = fs.statSync(videoData.filePath);
+                            const fileSizeMB = (stats.size / (1024 * 1024)).toFixed(2);
+
+                            console.log(`📊 Video size: ${fileSizeMB}MB`);
 
                             // Send the video file from local file
                             await sock.sendMessage(chatId, {
                                 video: { url: videoData.filePath },
                                 caption: `✅ *Download Complete!*\n\n` +
                                         `🎬 ${videoData.title}\n` +
-                                        `👤 ${selectedVideo.author.name}`,
+                                        `👤 ${selectedVideo.author.name}\n` +
+                                        `📦 Size: ${fileSizeMB}MB`,
                                 mimetype: 'video/mp4'
                             }, { quoted: msg });
 
-                            // Delete file after sending
-                            setTimeout(() => {
-                                videoData.cleanup();
-                            }, 5000);
+                            console.log('✅ Video sent successfully');
+
+                            // Delete file immediately after sending
+                            await videoData.cleanup();
 
                         } catch (error) {
                             console.error('❌ Video download error:', error);
+
+                            // Clean up file if download succeeded but send failed
+                            if (videoData && videoData.cleanup) {
+                                try {
+                                    await videoData.cleanup();
+                                    console.log('🗑️ Cleaned up failed video file');
+                                } catch (cleanupError) {
+                                    console.error('Cleanup error:', cleanupError);
+                                }
+                            }
+
+                            // Determine error message
+                            let errorMsg = error.message;
+                            if (error.code === 'ENOSPC') {
+                                errorMsg = 'Not enough disk space available. Please free up some space and try again.';
+                            }
+
                             await sock.sendMessage(chatId, {
                                 text: `❌ Failed to download video!\n\n` +
-                                      `Error: ${error.message}\n\n` +
-                                      `💡 Please try searching again with ${config.prefix}ytvideo`
+                                      `Error: ${errorMsg}\n\n` +
+                                      `💡 Try a shorter video or free up disk space`
                             });
                         }
                     })();
 
                     return; // Don't process as a command
                 }
+            }
+
+            // Check for trivia answer
+            const triviaSession = trivia.getSession(chatId);
+            if (triviaSession && !messageText.startsWith(config.prefix)) {
+                const userAnswer = messageText.trim();
+
+                // Check the answer
+                const result = trivia.checkAnswer(chatId, userAnswer);
+
+                // Send result message
+                await sock.sendMessage(chatId, {
+                    text: result.message
+                }, { quoted: msg });
+
+                return; // Don't process as a command
             }
 
             // Check for tic-tac-toe move (only if not a command)
