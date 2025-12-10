@@ -1535,8 +1535,9 @@ ${config.prefix}setvar <key> <value>
 
                 const audioData = await songs.downloadAudio(query, 'YouTube Audio');
 
+                // Send from local file
                 await sock.sendMessage(msg.key.remoteJid, {
-                    audio: { url: audioData.url },
+                    audio: { url: audioData.filePath },
                     mimetype: 'audio/mpeg',
                     fileName: `${audioData.title}.mp3`,
                     ptt: false
@@ -1545,6 +1546,9 @@ ${config.prefix}setvar <key> <value>
                 await sock.sendMessage(msg.key.remoteJid, {
                     text: `✅ *Download Complete!*\n\n🎵 ${audioData.title}\n👤 ${audioData.channel}`
                 });
+
+                // Delete file after sending
+                await audioData.cleanup();
                 return;
             }
 
@@ -1612,11 +1616,15 @@ ${config.prefix}setvar <key> <value>
 
                 const videoData = await ytvideo.downloadVideo(query, 'YouTube Video');
 
+                // Send from local file
                 await sock.sendMessage(msg.key.remoteJid, {
-                    video: { url: videoData.url },
+                    video: { url: videoData.filePath },
                     caption: `✅ *Download Complete!*\n\n🎬 ${videoData.title}`,
                     mimetype: 'video/mp4'
                 }, { quoted: msg });
+
+                // Delete file after sending
+                await videoData.cleanup();
                 return;
             }
 
@@ -2975,12 +2983,12 @@ ${config.prefix}setvar <key> <value>
                             text: songs.formatDownloadMessage(selectedVideo.title)
                         });
 
-                        // Get download URL
+                        // Download audio to file
                         const audioData = await songs.downloadAudio(selectedVideo.url, selectedVideo.title);
 
-                        // Send the audio file directly from URL
+                        // Send the audio file from local file
                         await sock.sendMessage(chatId, {
-                            audio: { url: audioData.url },
+                            audio: { url: audioData.filePath },
                             mimetype: 'audio/mpeg',
                             fileName: `${audioData.title}.mp3`,
                             ptt: false
@@ -2991,6 +2999,9 @@ ${config.prefix}setvar <key> <value>
                                   `🎵 ${audioData.title}\n` +
                                   `👤 ${audioData.channel || selectedVideo.author.name}`
                         });
+
+                        // Delete file after sending
+                        await audioData.cleanup();
 
                         // Clear session
                         songs.clearSearchSession(storageKeySongReply);
@@ -3023,17 +3034,20 @@ ${config.prefix}setvar <key> <value>
                             text: ytvideo.formatDownloadMessage(selectedVideo.title)
                         });
 
-                        // Get download URL
+                        // Download video to file
                         const videoData = await ytvideo.downloadVideo(selectedVideo.url, selectedVideo.title);
 
-                        // Send the video file directly from URL
+                        // Send the video file from local file
                         await sock.sendMessage(chatId, {
-                            video: { url: videoData.url },
+                            video: { url: videoData.filePath },
                             caption: `✅ *Download Complete!*\n\n` +
                                     `🎬 ${videoData.title}\n` +
                                     `👤 ${selectedVideo.author.name}`,
                             mimetype: 'video/mp4'
                         }, { quoted: msg });
+
+                        // Delete file after sending
+                        await videoData.cleanup();
 
                         // Clear session
                         ytvideo.clearSearchSession(storageKeyVidReply);

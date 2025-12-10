@@ -1,10 +1,18 @@
 const youtube = require('../lib/youtube');
 const ytmp4 = require('../lib/ytmp4');
+const axios = require('axios');
 const fs = require('fs');
+const fsPromises = require('fs/promises');
 const path = require('path');
 
 // Store user search sessions
 const searchSessions = new Map();
+
+// Downloads directory
+const downloadsDir = './downloads';
+if (!fs.existsSync(downloadsDir)) {
+    fs.mkdirSync(downloadsDir, { recursive: true });
+}
 
 /**
  * Search YouTube for videos
@@ -52,15 +60,55 @@ function formatSearchResults(results, query) {
  * Get YouTube video download data
  * @param {string} url - YouTube video URL
  * @param {string} title - Video title (for filename)
- * @returns {Promise<Object>} { url, title, thumbnail }
+ * @returns {Promise<Object>} { filePath, title, thumbnail, cleanup }
  */
 async function downloadVideo(url, title) {
     try {
+        // Get download link from API
         const result = await ytmp4(url);
-        return result;
+        const downloadUrl = result.url;
+
+        // Create safe filename
+        const safeTitle = title.replace(/[^\w\s-]/g, '').trim().substring(0, 100);
+        const timestamp = Date.now();
+        const filename = `${safeTitle}_${timestamp}.mp4`;
+        const filePath = path.join(downloadsDir, filename);
+
+        // Download to file
+        console.log('📥 Downloading video to:', filePath);
+        const response = await axios.get(downloadUrl, {
+            responseType: 'stream',
+            timeout: 300000, // 5 minutes for large videos
+            maxContentLength: 200 * 1024 * 1024 // 200MB limit
+        });
+
+        const writer = fs.createWriteStream(filePath);
+        response.data.pipe(writer);
+
+        await new Promise((resolve, reject) => {
+            writer.on('finish', resolve);
+            writer.on('error', reject);
+        });
+
+        console.log('✅ Video downloaded successfully');
+
+        // Return file path and cleanup function
+        return {
+            filePath: filePath,
+            title: result.title || title,
+            thumbnail: result.thumbnail,
+            cleanup: async () => {
+                try {
+                    await fsPromises.unlink(filePath);
+                    console.log('🗑️ Deleted:', filePath);
+                } catch (err) {
+                    console.error('Failed to delete file:', err);
+                }
+            }
+        };
     } catch (error) {
         console.error('Download error:', error);
-        throw new Error('Failed to get download link');
+        throw new Error('Failed to download video');
     }
 }
 
