@@ -92,7 +92,14 @@ async function textmakerCommand(sock, msg, text, type) {
                     result = await mumaker.ephoto("https://en.ephoto360.com/create-a-frozen-christmas-text-effect-online-792.html", text);
                     break;
                 case 'deadpool':
-                    result = await mumaker.ephoto("http://en.ephoto360.com/create-text-effects-in-the-style-of-the-deadpool-logo-818.html", text);
+                    // Deadpool requires 2 text inputs separated by comma
+                    const deadpoolTexts = text.split(',').map(t => t.trim());
+                    if (deadpoolTexts.length < 2) {
+                        return await sock.sendMessage(chatId, {
+                            text: `❌ Deadpool effect requires 2 texts separated by comma\n\n*Example:* .deadpool Fiazzy,Paul`
+                        });
+                    }
+                    result = await mumaker.ephoto("http://en.ephoto360.com/create-text-effects-in-the-style-of-the-deadpool-logo-818.html", [deadpoolTexts[0], deadpoolTexts[1]]);
                     break;
                 case 'dbz':
                     result = await mumaker.ephoto("https://en.ephoto360.com/create-dragon-ball-style-text-effects-online-809.html", text);

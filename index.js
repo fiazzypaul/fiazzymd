@@ -45,6 +45,7 @@ const jids = require('./features/jids');
 const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
 const mediafire = require('./lib/mediafire');
+const convertStickerToImage = require('./features/simage');
 const registerMediafireCommand = require('./features/mediafire');
 const registerAntiwordsCommand = require('./features/antiwords');
 const { extractAudioToMp3, reverseMedia } = require('./lib/audio');
@@ -1089,6 +1090,22 @@ ${config.botMode === 'private' ? '🔒 Private Mode' : '🌐 Public Mode'}`;
     registerCommand('s', 'Alias for sticker', async (sock, msg, args) => {
         const handler = commands.get('sticker');
         if (handler) return handler(sock, msg, args);
+    });
+
+    // Register simage command (sticker to image/video converter)
+    registerCommand('simage', 'Convert sticker to image or animated sticker to video', async (sock, msg, args) => {
+        const chatId = msg.key.remoteJid;
+        const quotedMsg = getQuotedMessage(msg);
+
+        if (!quotedMsg) {
+            await sock.sendMessage(chatId, { text: `❌ Reply to a sticker with ${config.prefix}simage to convert it!` });
+            return;
+        }
+
+        let q = quotedMsg;
+        if (q.ephemeralMessage) q = q.ephemeralMessage.message;
+
+        await convertStickerToImage(sock, q, chatId);
     });
 
     // welcome moved to features/group.js
