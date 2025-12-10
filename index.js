@@ -714,6 +714,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}devil
 │ ${config.prefix}hacker
 │ ${config.prefix}light
+│ ${config.prefix}lightstyles
+│ ${config.prefix}lightstyle
 │ ${config.prefix}impressive
 │ ${config.prefix}leaves
 │ ${config.prefix}sand
@@ -725,6 +727,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}christmas2
 │ ${config.prefix}frost
 │ ${config.prefix}deadpool
+│ ${config.prefix}neonavatar
 │ ${config.prefix}dbz
 │ ${config.prefix}naruto
 │ ${config.prefix}pixelglitch
