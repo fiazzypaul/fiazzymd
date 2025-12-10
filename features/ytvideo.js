@@ -8,6 +8,9 @@ const path = require('path');
 // Store user search sessions
 const searchSessions = new Map();
 
+// Store active downloads
+const activeDownloads = new Map();
+
 // Downloads directory
 const downloadsDir = './downloads';
 if (!fs.existsSync(downloadsDir)) {
@@ -57,12 +60,16 @@ function formatSearchResults(results, query) {
 }
 
 /**
- * Get YouTube video download data
+ * Get YouTube video download data with background processing
  * @param {string} url - YouTube video URL
  * @param {string} title - Video title (for filename)
+ * @param {string} downloadId - Unique download ID
+ * @param {Function} progressCallback - Optional progress callback
  * @returns {Promise<Object>} { filePath, title, thumbnail, cleanup }
  */
-async function downloadVideo(url, title) {
+async function downloadVideo(url, title, downloadId = null, progressCallback = null) {
+    const dlId = downloadId || `dl_${Date.now()}`;
+
     try {
         // Get download link from API
         const result = await ytmp4(url);
@@ -74,15 +81,48 @@ async function downloadVideo(url, title) {
         const filename = `${safeTitle}_${timestamp}.mp4`;
         const filePath = path.join(downloadsDir, filename);
 
-        // Download to file
+        // Track download
+        activeDownloads.set(dlId, {
+            filePath,
+            title: result.title || title,
+            progress: 0,
+            status: 'downloading'
+        });
+
+        // Download to file with progress tracking
         console.log('📥 Downloading video to:', filePath);
         const response = await axios.get(downloadUrl, {
             responseType: 'stream',
-            timeout: 300000, // 5 minutes for large videos
-            maxContentLength: 200 * 1024 * 1024 // 200MB limit
+            timeout: 600000, // 10 minutes for very large videos
+            maxContentLength: 500 * 1024 * 1024, // 500MB limit
+            onDownloadProgress: (progressEvent) => {
+                if (progressEvent.total) {
+                    const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                    activeDownloads.get(dlId).progress = percentCompleted;
+
+                    if (progressCallback && percentCompleted % 10 === 0) {
+                        progressCallback(percentCompleted, progressEvent.loaded, progressEvent.total);
+                    }
+                }
+            }
         });
 
+        const totalSize = parseInt(response.headers['content-length'] || '0');
+        let downloadedSize = 0;
+
         const writer = fs.createWriteStream(filePath);
+
+        response.data.on('data', (chunk) => {
+            downloadedSize += chunk.length;
+            if (totalSize > 0) {
+                const progress = Math.round((downloadedSize * 100) / totalSize);
+                const download = activeDownloads.get(dlId);
+                if (download) {
+                    download.progress = progress;
+                }
+            }
+        });
+
         response.data.pipe(writer);
 
         await new Promise((resolve, reject) => {
@@ -92,15 +132,24 @@ async function downloadVideo(url, title) {
 
         console.log('✅ Video downloaded successfully');
 
+        // Update status
+        const download = activeDownloads.get(dlId);
+        if (download) {
+            download.status = 'completed';
+            download.progress = 100;
+        }
+
         // Return file path and cleanup function
         return {
             filePath: filePath,
             title: result.title || title,
             thumbnail: result.thumbnail,
+            downloadId: dlId,
             cleanup: async () => {
                 try {
                     await fsPromises.unlink(filePath);
                     console.log('🗑️ Deleted:', filePath);
+                    activeDownloads.delete(dlId);
                 } catch (err) {
                     console.error('Failed to delete file:', err);
                 }
@@ -108,7 +157,40 @@ async function downloadVideo(url, title) {
         };
     } catch (error) {
         console.error('Download error:', error);
-        throw new Error('Failed to download video');
+
+        // Update status to failed
+        const download = activeDownloads.get(dlId);
+        if (download) {
+            download.status = 'failed';
+            download.error = error.message;
+        }
+
+        throw new Error('Failed to download video: ' + error.message);
+    }
+}
+
+/**
+ * Check if a download is active
+ * @param {string} downloadId - Download ID
+ * @returns {Object|null} Download status or null
+ */
+function getDownloadStatus(downloadId) {
+    return activeDownloads.get(downloadId) || null;
+}
+
+/**
+ * Cancel an active download
+ * @param {string} downloadId - Download ID
+ */
+async function cancelDownload(downloadId) {
+    const download = activeDownloads.get(downloadId);
+    if (download && download.filePath) {
+        try {
+            await fsPromises.unlink(download.filePath);
+        } catch (err) {
+            console.error('Failed to delete file:', err);
+        }
+        activeDownloads.delete(downloadId);
     }
 }
 
@@ -179,6 +261,8 @@ module.exports = {
     searchYouTube,
     formatSearchResults,
     downloadVideo,
+    getDownloadStatus,
+    cancelDownload,
     storeSearchSession,
     getSearchSession,
     clearSearchSession,
