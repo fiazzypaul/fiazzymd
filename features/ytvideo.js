@@ -124,7 +124,7 @@ function formatDownloadMessage(title) {
     return `🎬 *DOWNLOADING VIDEO*\n\n` +
            `📝 Title: ${title}\n\n` +
            `⏳ Please wait, downloading video...\n` +
-           `📹 Quality: 360p MP4...`;
+           `📹 Quality: Best Available (up to 1080p)...`;
 }
 
 module.exports = {
