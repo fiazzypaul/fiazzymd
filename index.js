@@ -40,6 +40,7 @@ const scheduler = require('./features/scheduler');
 const { updateGroupProfilePicture } = require('./features/gpp');
 const tictactoe = require('./features/tictactoe');
 const wcg = require('./features/wcg');
+const textmaker = require('./features/textmaker');
 const jids = require('./features/jids');
 const system = require('./features/system');
 const registerGroupCommands = require('./features/group');
@@ -620,39 +621,38 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╰──────────────────────╯
 
 ╭─────────────────────╮
-│  📌 *BOT INFORMATION*  │
+│  📌 *BOT INFO*  │
 ╰─────────────────────╯
-│ *Prefix:* ${config.prefix}
-│ *Mode:* ${config.botMode.toUpperCase()}
-│ *Commands:* ${commands.size}
-│ *Version:* ${config.botVersion}
+│ Prefix: ${config.prefix}
+│ Mode: ${config.botMode.toUpperCase()}
+│ Commands: ${commands.size}
 ╰─────────────────────╯
 
 ╭──────────────────────╮
-│  👥 *GROUP COMMANDS*  │
+│  👥 *GROUP*  │
 ╰──────────────────────╯
-│ ${config.prefix}add - Add member
-│ ${config.prefix}kick - Remove member
-│ ${config.prefix}promote - Make admin
-│ ${config.prefix}demote - Remove admin
-│ ${config.prefix}tag - Tag members
-│ ${config.prefix}tagall - List all members
-│ ${config.prefix}mute - Mute group
-│ ${config.prefix}unmute - Unmute group
-│ ${config.prefix}warn - Warn user
-│ ${config.prefix}resetwarn - Reset warnings
-│ ${config.prefix}antilink - Anti-link settings
-│ ${config.prefix}antiword - Anti-word filter
-│ ${config.prefix}welcome - Welcome settings
-│ ${config.prefix}gpp - Change group picture
-│ ${config.prefix}left - Leave group (owner only)
-│ ${config.prefix}invite - Get invite link
-│ ${config.prefix}revoke - Reset invite link
-│ ${config.prefix}ginfo - Group info
+│ ${config.prefix}add
+│ ${config.prefix}kick
+│ ${config.prefix}promote
+│ ${config.prefix}demote
+│ ${config.prefix}tag
+│ ${config.prefix}tagall
+│ ${config.prefix}mute
+│ ${config.prefix}unmute
+│ ${config.prefix}warn
+│ ${config.prefix}resetwarn
+│ ${config.prefix}antilink
+│ ${config.prefix}antiword
+│ ${config.prefix}welcome
+│ ${config.prefix}gpp
+│ ${config.prefix}left
+│ ${config.prefix}invite
+│ ${config.prefix}revoke
+│ ${config.prefix}ginfo
 ╰──────────────────────╯
 
 ╭──────────────────────╮
-│  ⚙️ *GENERAL COMMANDS*  │
+│  ⚙️ *GENERAL*  │
 ╰──────────────────────╯
 │ ${config.prefix}ping
 │ ${config.prefix}help
@@ -667,68 +667,95 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}savejid
 │ ${config.prefix}gemini
 │ ${config.prefix}alive
-│ ${config.prefix}wapresence (owner only)
-│ ${config.prefix}schedule (owner only)
-│ ${config.prefix}schedules (owner only)
-│ ${config.prefix}schedulecancel (owner only)
-│ ${config.prefix}uptime (owner only)
-│ ${config.prefix}restart (owner only)
-│ ${config.prefix}update (owner only)
-│ ${config.prefix}autostatus (owner only)
+│ ${config.prefix}wapresence
+│ ${config.prefix}schedule
+│ ${config.prefix}schedules
+│ ${config.prefix}schedulecancel
+│ ${config.prefix}uptime
+│ ${config.prefix}restart
+│ ${config.prefix}update
+│ ${config.prefix}autostatus
 ╰──────────────────────╯
 
 ╭──────────────────────╮
-│  📥 *DOWNLOADS*        │
+│  📥 *DOWNLOADS*  │
 ╰──────────────────────╯
-│ ${config.prefix}song <query> - Download YouTube audio
-│ ${config.prefix}ytvideo <query> - Download YouTube video
-│ ${config.prefix}tiktok <url> - Download TikTok video/images
-│ ${config.prefix}yts <query> - YouTube search
-│ ${config.prefix}mediafire <url> - Download from MediaFire
-│ ${config.prefix}apk <name> - Download Android APK
-╰──────────────────────╯
-
-╭──────────────────────╮
-│  🎵 *AUDIO*            │
-╰──────────────────────╯
-│ ${config.prefix}mp3 - Extract audio from video (reply)
-│ ${config.prefix}reverse - Reverse audio/video (reply)
+│ ${config.prefix}song
+│ ${config.prefix}ytvideo
+│ ${config.prefix}tiktok
+│ ${config.prefix}yts
+│ ${config.prefix}mediafire
+│ ${config.prefix}apk
 ╰──────────────────────╯
 
 ╭──────────────────────╮
-│  🎬 *ENTERTAINMENT*    │
+│  🎵 *AUDIO*  │
 ╰──────────────────────╯
-│ ${config.prefix}movie - Movie recommendations
-│    • ${config.prefix}movie trending | random | <query>
-│ ${config.prefix}anime - Anime recommendations
-│    • ${config.prefix}anime top | seasonal | random | <query>
-│ ${config.prefix}emojimix - Mix two emojis into sticker
+│ ${config.prefix}mp3
+│ ${config.prefix}reverse
 ╰──────────────────────╯
 
 ╭──────────────────────╮
-│  🎮 *GAMES*            │
+│  🎨 *TEXT MAKER*  │
 ╰──────────────────────╯
-│ ${config.prefix}ttt @user - Play tic-tac-toe
-│ ${config.prefix}ttt end - End current game
-│ ${config.prefix}wcg @user - Word chain game
+│ ${config.prefix}metallic
+│ ${config.prefix}fire
+│ ${config.prefix}neon
+│ ${config.prefix}glitch
+│ ${config.prefix}matrix
+│ ${config.prefix}thunder
+│ ${config.prefix}ice
+│ ${config.prefix}snow
+│ ${config.prefix}purple
+│ ${config.prefix}devil
+│ ${config.prefix}hacker
+│ ${config.prefix}light
+│ ${config.prefix}impressive
+│ ${config.prefix}leaves
+│ ${config.prefix}sand
+│ ${config.prefix}blackpink
+│ ${config.prefix}1917
+│ ${config.prefix}arena
+│ ${config.prefix}wings
+│ ${config.prefix}christmas1
+│ ${config.prefix}christmas2
+│ ${config.prefix}frost
+│ ${config.prefix}deadpool
+│ ${config.prefix}dbz
+│ ${config.prefix}naruto
+│ ${config.prefix}pixelglitch
+│ ${config.prefix}arrow
 ╰──────────────────────╯
 
 ╭──────────────────────╮
-│  🧩 *VAR COMMANDS*     │
+│  🎬 *ENTERTAINMENT*  │
 ╰──────────────────────╯
-│ ${config.prefix}seevar - View all vars
-│ ${config.prefix}mode - Change bot mode
-│ ${config.prefix}prefix - Change prefix
-│ ${config.prefix}ownernumber - Set owner
-│ ${config.prefix}setvar - Set any var
-│ ${config.prefix}autoviewonce - Auto view-once
-│ ${config.prefix}antidelete - Anti-delete (owner only)
-│ ${config.prefix}wapresence (owner only)
+│ ${config.prefix}movie
+│ ${config.prefix}anime
+│ ${config.prefix}emojimix
 ╰──────────────────────╯
 
-💡 Type ${config.prefix}help <command> for details
+╭──────────────────────╮
+│  🎮 *GAMES*  │
+╰──────────────────────╯
+│ ${config.prefix}ttt
+│ ${config.prefix}wcg
+╰──────────────────────╯
 
-${config.botMode === 'private' ? '🔒 Private Mode - Owner Only' : '🌐 Public Mode - Everyone'}`;
+╭──────────────────────╮
+│  🧩 *VAR COMMANDS*  │
+╰──────────────────────╯
+│ ${config.prefix}seevar
+│ ${config.prefix}mode
+│ ${config.prefix}prefix
+│ ${config.prefix}ownernumber
+│ ${config.prefix}setvar
+│ ${config.prefix}autoviewonce
+│ ${config.prefix}antidelete
+╰──────────────────────╯
+
+💡 ${config.prefix}help <command> for usage
+${config.botMode === 'private' ? '🔒 Private Mode' : '🌐 Public Mode'}`;
 
         // Check if menu image exists (supports multiple formats)
         const imageFormats = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
@@ -1621,6 +1648,142 @@ ${config.prefix}setvar <key> <value>
     // Register reverse media command
     registerCommand('reverse', 'Reverse audio or video', async (sock, msg, args) => {
         await reverseMedia(sock, msg);
+    });
+
+    // Register Text Maker commands
+    registerCommand('metallic', 'Generate 3D metal text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'metallic');
+    });
+
+    registerCommand('fire', 'Generate flame text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'fire');
+    });
+
+    registerCommand('neon', 'Generate neon light text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'neon');
+    });
+
+    registerCommand('glitch', 'Generate digital glitch text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'glitch');
+    });
+
+    registerCommand('matrix', 'Generate matrix style text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'matrix');
+    });
+
+    registerCommand('thunder', 'Generate thunder text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'thunder');
+    });
+
+    registerCommand('ice', 'Generate ice text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'ice');
+    });
+
+    registerCommand('snow', 'Generate snow 3D text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'snow');
+    });
+
+    registerCommand('purple', 'Generate purple text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'purple');
+    });
+
+    registerCommand('devil', 'Generate neon devil wings text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'devil');
+    });
+
+    registerCommand('hacker', 'Generate anonymous hacker text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'hacker');
+    });
+
+    registerCommand('light', 'Generate futuristic light text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'light');
+    });
+
+    registerCommand('impressive', 'Generate colorful paint text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'impressive');
+    });
+
+    registerCommand('leaves', 'Generate green brush text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'leaves');
+    });
+
+    registerCommand('sand', 'Generate text on sand effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'sand');
+    });
+
+    registerCommand('blackpink', 'Generate BLACKPINK style text', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'blackpink');
+    });
+
+    registerCommand('1917', 'Generate 1917 style text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, '1917');
+    });
+
+    registerCommand('arena', 'Generate Arena of Valor style text', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'arena');
+    });
+
+    registerCommand('wings', 'Generate wings text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'wings');
+    });
+
+    registerCommand('christmas1', 'Generate sparkles 3D Christmas text', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'christmas1');
+    });
+
+    registerCommand('christmas2', 'Generate Christmas video card style', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'christmas2');
+    });
+
+    registerCommand('frost', 'Generate frozen Christmas text', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'frost');
+    });
+
+    registerCommand('deadpool', 'Generate Deadpool logo style text', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'deadpool');
+    });
+
+    registerCommand('dbz', 'Generate Dragon Ball Z style text', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'dbz');
+    });
+
+    registerCommand('naruto', 'Generate Naruto Shippuden style text', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'naruto');
+    });
+
+    registerCommand('pixelglitch', 'Generate pixel glitch text effect', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'pixelglitch');
+    });
+
+    registerCommand('arrow', 'Generate multicolored arrow signature', async (sock, msg, args) => {
+        const text = args.join(' ');
+        await textmaker(sock, msg, text, 'arrow');
     });
 
     /* moved to features/group.js */

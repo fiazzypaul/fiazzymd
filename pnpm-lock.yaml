@@ -38,6 +38,9 @@ importers:
       fluent-ffmpeg:
         specifier: ^2.1.3
         version: 2.1.3
+      mumaker:
+        specifier: ^2.0.0
+        version: 2.0.0
       node-fecth:
         specifier: 0.0.1-security
         version: 0.0.1-security
@@ -1462,6 +1465,9 @@ packages:
 
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
+
+  mumaker@2.0.0:
+    resolution: {integrity: sha512-FwYFD/Rs4Cp34yK5oLWbDBroJeSutCoL9WmGwtWta9+eG4THqUiCL4zdaczJOjdFAmEmJaEC54q8ozAPmnn4dg==}
 
   music-metadata@11.10.3:
     resolution: {integrity: sha512-j0g/x4cNNZW6I5gdcPAY+GFkJY9WHTpkFDMBJKQLxJQyvSfQbXm57fTE3haGFFuOzCgtsTd4Plwc49Sn9RacDQ==}
@@ -3606,6 +3612,14 @@ snapshots:
   module-details-from-path@1.0.4: {}
 
   ms@2.1.3: {}
+
+  mumaker@2.0.0:
+    dependencies:
+      axios: 1.13.2
+      cheerio: 1.1.2
+      form-data: 4.0.5
+    transitivePeerDependencies:
+      - debug
 
   music-metadata@11.10.3:
     dependencies:
