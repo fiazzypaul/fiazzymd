@@ -93,27 +93,8 @@ module.exports = (config) => {
     // Bot Owner Bypass - Owner can run ANY command in ANY mode, ANYWHERE
     if (isOwner) return { allowed: true };
 
-    // Non-owner users: Private mode — allow only group admins to use group functions
+    // Non-owner users: Private mode — owner-only, deny everyone else silently
     if (!isOwner && config.botMode === 'private') {
-      const inGrp = isGroup(msg.key.remoteJid);
-      // Owner-only commands always blocked for non-owner
-      if (varCommands.has(cmdName)) {
-        return { allowed: false, reason: '❌ Only the bot owner can use this command!' };
-      }
-      // Non-group chats blocked
-      if (!inGrp) {
-        return { allowed: false, silent: true };
-      }
-      // In groups, only allow group-specific commands for admins
-      if (groupOnlyCommands.has(cmdName) || groupAdminCommands.has(cmdName)) {
-        const userJid = msg.key.participant;
-        const admin = await isUserAdmin(sock, msg.key.remoteJid, userJid);
-        if (!admin) {
-          return { allowed: false, reason: '❌ Only group admins can use this in private mode!' };
-        }
-        return { allowed: true };
-      }
-      // Block other commands in private mode for non-owner
       return { allowed: false, silent: true };
     }
 
