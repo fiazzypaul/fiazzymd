@@ -56,6 +56,7 @@ const registerApkCommand = require('./features/apk');
 const registerEmojimixCommand = require('./features/emojimix');
 const saveStatus = require('./lib/saveStatus');
 const registerEphotoCommands = require('./features/ephoto');
+const sudoFeature = require('./features/sudo');
 const { flirtCommand } = require('./features/flirt');
 const { dareCommand } = require('./features/dare');
 
@@ -778,6 +779,9 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}setvar
 │ ${config.prefix}autoviewonce
 │ ${config.prefix}antidelete
+│ ${config.prefix}setsudo
+│ ${config.prefix}delsudo
+│ ${config.prefix}seesudo
 ╰──────────────────────╯
 
 💡 ${config.prefix}help <command> for usage
@@ -3772,6 +3776,47 @@ ${config.prefix}setvar <key> <value>
       registerApkCommand({ registerCommand });
       registerEmojimixCommand({ registerCommand });
       registerEphotoCommands({ registerCommand });
+      registerCommand('seesudo', 'List sudo users (owner only)', async (sock, msg) => {
+        const jid = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
+        const list = sudoFeature.listSudos();
+        const text = list.length ? `👑 *Sudo Users*\n\n${list.map(n => `• ${n}`).join('\n')}` : 'ℹ️ No sudo users set.';
+        await sock.sendMessage(jid, { text });
+      });
+      registerCommand('setsudo', 'Add a sudo user (owner only)', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
+        let num = '';
+        const ctx = msg.message?.extendedTextMessage?.contextInfo;
+        if (ctx?.participant) num = ctx.participant.split('@')[0].replace(/[^0-9]/g, '');
+        if (!num && args[0]) num = String(args[0]).replace(/[^0-9]/g, '');
+        if (!num) { await sock.sendMessage(jid, { text: '❌ Provide a number or reply to a user.' }); return; }
+        const ok = sudoFeature.addSudo(num);
+        await sock.sendMessage(jid, { text: ok ? `✅ Added sudo: ${num}` : '❌ Failed to add sudo' });
+      });
+      registerCommand('delsudo', 'Remove a sudo user (owner only)', async (sock, msg, args) => {
+        const jid = msg.key.remoteJid;
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
+        const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
+        if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
+        let num = '';
+        const ctx = msg.message?.extendedTextMessage?.contextInfo;
+        if (ctx?.participant) num = ctx.participant.split('@')[0].replace(/[^0-9]/g, '');
+        if (!num && args[0]) num = String(args[0]).replace(/[^0-9]/g, '');
+        if (!num) { await sock.sendMessage(jid, { text: '❌ Provide a number or reply to a user.' }); return; }
+        const ok = sudoFeature.removeSudo(num);
+        await sock.sendMessage(jid, { text: ok ? `✅ Removed sudo: ${num}` : 'ℹ️ Not found' });
+      });
       registerCommand('flirt', 'Send a random flirt message', async (sock, msg) => {
         const chatId = msg.key.remoteJid;
         await flirtCommand(sock, chatId, msg);
