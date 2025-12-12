@@ -3787,33 +3787,39 @@ ${config.prefix}setvar <key> <value>
         const text = list.length ? `👑 *Sudo Users*\n\n${list.map(n => `• ${n}`).join('\n')}` : 'ℹ️ No sudo users set.';
         await sock.sendMessage(jid, { text });
       });
-      registerCommand('setsudo', 'Add a sudo user (owner only)', async (sock, msg, args) => {
+      registerCommand('setsudo', 'Add a sudo user by number only (owner only): .setsudo 234xxx', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
         const senderJid = msg.key.participant || msg.key.remoteJid;
         const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
         const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
         const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
         if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
-        let num = '';
-        const ctx = msg.message?.extendedTextMessage?.contextInfo;
-        if (ctx?.participant) num = ctx.participant.split('@')[0].replace(/[^0-9]/g, '');
-        if (!num && args[0]) num = String(args[0]).replace(/[^0-9]/g, '');
-        if (!num) { await sock.sendMessage(jid, { text: '❌ Provide a number or reply to a user.' }); return; }
+
+        // Only accept number from args
+        const num = args[0] ? String(args[0]).replace(/[^0-9]/g, '') : '';
+        if (!num) {
+          await sock.sendMessage(jid, { text: '❌ Provide a number.\n\n*Usage:* .setsudo 2349133961422' });
+          return;
+        }
+
         const ok = sudoFeature.addSudo(num);
         await sock.sendMessage(jid, { text: ok ? `✅ Added sudo: ${num}` : '❌ Failed to add sudo' });
       });
-      registerCommand('delsudo', 'Remove a sudo user (owner only)', async (sock, msg, args) => {
+      registerCommand('delsudo', 'Remove a sudo user by number only (owner only): .delsudo 234xxx', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
         const senderJid = msg.key.participant || msg.key.remoteJid;
         const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
         const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
         const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
         if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
-        let num = '';
-        const ctx = msg.message?.extendedTextMessage?.contextInfo;
-        if (ctx?.participant) num = ctx.participant.split('@')[0].replace(/[^0-9]/g, '');
-        if (!num && args[0]) num = String(args[0]).replace(/[^0-9]/g, '');
-        if (!num) { await sock.sendMessage(jid, { text: '❌ Provide a number or reply to a user.' }); return; }
+
+        // Only accept number from args
+        const num = args[0] ? String(args[0]).replace(/[^0-9]/g, '') : '';
+        if (!num) {
+          await sock.sendMessage(jid, { text: '❌ Provide a number.\n\n*Usage:* .delsudo 2349133961422' });
+          return;
+        }
+
         const ok = sudoFeature.removeSudo(num);
         await sock.sendMessage(jid, { text: ok ? `✅ Removed sudo: ${num}` : 'ℹ️ Not found' });
       });
