@@ -465,8 +465,8 @@ async function handleAnime2Selection(sock, chatId, selection, msg) {
             // Get video info
             const videoInfo = await session.scraper.getVideoInfo(videoUrl);
 
-            // Send video based on size
-            await sendAnime2Video(sock, chatId, videoInfo, session.selectedAnime.name, selectedEpisode.text, msg);
+            // Send video based on size (page link for large files)
+            await sendAnime2Video(sock, chatId, videoInfo, session.selectedAnime.name, selectedEpisode.text, session.selectedAnime.code, msg);
 
             // Clear session after download
             clearAnime2Session(chatId);
@@ -488,7 +488,7 @@ async function handleAnime2Selection(sock, chatId, selection, msg) {
 /**
  * Send anime video with smart size handling and splitting
  */
-async function sendAnime2Video(sock, chatId, videoInfo, animeName, episodeText, msg) {
+async function sendAnime2Video(sock, chatId, videoInfo, animeName, episodeText, animeCode, msg) {
     try {
         const sizeMB = videoInfo.sizeMB;
         const safeFilename = animeName.replace(/[^\w\s-]/g, '').trim().substring(0, 50);
@@ -505,82 +505,21 @@ async function sendAnime2Video(sock, chatId, videoInfo, animeName, episodeText, 
             return;
         }
 
-        // Path 2: Document (d115MB)
-        if (sizeMB <= 115) {
-            const fileName = `${safeFilename}_EP${epNum}.mp4`;
-
-            try {
-                await sock.sendMessage(chatId, {
-                    document: { url: videoInfo.url },
-                    mimetype: 'video/mp4',
-                    fileName,
-                    caption: caption + '\n\nSent as document due to size'
-                }, { quoted: msg });
-                return;
-            } catch (diskError) {
-                // If disk error (ENOSPC), fall through to link-only path
-                if (diskError.code === 'ENOSPC' || diskError.message.includes('no space left')) {
-                    console.log('Disk space error, sending link instead');
-                } else {
-                    throw diskError;
-                }
-            }
-        }
-
-        // Path 3: Split video (>115MB, d345MB - 3 parts max)
-        if (sizeMB > 115 && sizeMB <= 345) {
-            const numParts = Math.ceil(sizeMB / 115);
-
-            try {
-                await sock.sendMessage(chatId, {
-                    text: `*Large Video - Splitting*\n\n${animeName}\n${episodeText}\nSize: ${sizeMB.toFixed(2)}MB\n\nSplitting into ${numParts} parts...\nPlease wait...`
-                }, { quoted: msg });
-
-                // Send each part
-                for (let i = 0; i < numParts; i++) {
-                    const partFilename = `${safeFilename}_EP${epNum}_Part${i + 1}of${numParts}.mp4`;
-
-                    await sock.sendMessage(chatId, {
-                        document: { url: videoInfo.url },
-                        mimetype: 'video/mp4',
-                        fileName: partFilename,
-                        caption: `Part ${i + 1}/${numParts}\n${animeName}\n${episodeText}`
-                    }, { quoted: msg });
-
-                    // Small delay between parts
-                    if (i < numParts - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-                    }
-                }
-
-                await sock.sendMessage(chatId, {
-                    text: `*All parts sent!*\n\n${animeName}\n${episodeText}\n${numParts} parts delivered`
-                }, { quoted: msg });
-                return;
-
-            } catch (splitError) {
-                if (splitError.code === 'ENOSPC' || splitError.message.includes('no space left')) {
-                    console.log('Disk space error during split, sending link instead');
-                } else {
-                    throw splitError;
-                }
-            }
-        }
-
-        // Path 4: Link only (>345MB or disk error)
+        // Link-only for any video > 16MB (prevent ENOSPC and restarts)
+        const pageUrl = `https://animeheaven.me/anime.php?${animeCode || ''}`;
         await sock.sendMessage(chatId, {
-            text: `*Download Link*\n\n${animeName}\n${episodeText}\nSize: ${sizeMB.toFixed(2)}MB\n\n${videoInfo.url}\n\nVideo too large for WhatsApp. Use the link to download.`
+            text: `*Episode Link*\n\n${animeName}\n${episodeText}\nSize: ${sizeMB.toFixed(2)}MB\n\nAnime Page:\n${pageUrl}\n\nOpen this page in your browser and tap the episode to play/download.`
         }, { quoted: msg });
 
     } catch (error) {
         console.error('Send anime2 video error:', error);
 
         // Final fallback: send link only
+        const pageUrl = `https://animeheaven.me/anime.php?${animeCode || ''}`;
         await sock.sendMessage(chatId, {
-            text: `*Failed to send video*\n\n${animeName}\n${episodeText}\n\n*Download Link:*\n${videoInfo.url}\n\nDownload manually using this link`
+            text: `*Failed to send video*\n\n${animeName}\n${episodeText}\n\n*Anime Page:*\n${pageUrl}\n\nOpen the page and tap the episode to play/download.`
         }, { quoted: msg });
-
-        throw error;
+        return;
     }
 }
 
