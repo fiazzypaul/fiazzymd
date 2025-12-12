@@ -2,7 +2,7 @@ module.exports = (config) => {
   const groupAdminCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'warn', 'antilink', 'warnlimit', 'tag', 'tagall', 'resetwarn', 'welcome', 'del', 'gpp']);
   const groupOnlyCommands = new Set(['add', 'kick', 'kickall', 'promote', 'demote', 'mute', 'unmute', 'tag', 'tagall', 'warn', 'antilink', 'warnlimit', 'resetwarn', 'welcome', 'del', 'gpp', 'left']);
   const generalCommands = new Set(['menu', 'ping', 'help', 'session', 'vv', 'sticker', 'img', 'movie', 'anime', 'alive', 'ttt', 'wcg', 'song', 'ytvideo', 'tiktok', 'yts', 'mediafire', 'apk', 'mp3', 'reverse', 'metallic', 'fire', 'neon', 'glitch', 'matrix', 'thunder', 'ice', 'snow', 'purple', 'devil', 'hacker', 'light', 'impressive', 'leaves', 'sand', 'blackpink', '1917', 'arena', 'wings', 'christmas1', 'christmas2', 'frost', 'deadpool', 'dbz', 'naruto', 'pixelglitch', 'arrow']);
-  const varCommands = new Set(['autoviewonce', 'setvar', 'mode', 'prefix', 'ownernumber', 'seevar', 'antidelete', 'wapresence', 'left']); // Commands that modify global .env settings
+  const varCommands = new Set(['autoviewonce', 'setvar', 'mode', 'prefix', 'ownernumber', 'seevar', 'antidelete', 'wapresence', 'left', 'setsudo', 'delsudo', 'seesudo']); // Commands that modify global .env settings
 
   const isGroup = (jid) => jid.endsWith('@g.us');
 
@@ -92,6 +92,19 @@ module.exports = (config) => {
 
     // Bot Owner Bypass - Owner can run ANY command in ANY mode, ANYWHERE
     if (isOwner) return { allowed: true };
+
+    // Sudo bypass (except var commands which remain owner-only)
+    let isSudo = false;
+    try {
+      const { isSudoJid } = require('./features/sudo');
+      isSudo = isSudoJid(senderJid);
+    } catch {}
+    if (isSudo) {
+      if (varCommands.has(cmdName)) {
+        return { allowed: false, reason: '❌ Only the bot owner can use this command!' };
+      }
+      return { allowed: true };
+    }
 
     // Non-owner users: Private mode — owner-only, deny everyone else silently
     if (!isOwner && config.botMode === 'private') {
