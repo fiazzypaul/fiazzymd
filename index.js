@@ -33,6 +33,7 @@ const youtube = require('./lib/youtube');
 const tiktokDownloader = require('./lib/tiktok');
 const { searchMovies, getTrendingMovies, getRandomMovie, formatMovieResults, formatMovieDetails } = require('./features/movies');
 const { searchAnime, getTopAnime, getSeasonalAnime, getRandomAnime, formatAnimeResults, formatAnimeDetails } = require('./features/anime');
+const anime2 = require('./features/anime2');
 const presence = require('./features/presence');
 const alive = require('./features/alive');
 const ytsFeature = require('./features/yts');
@@ -748,6 +749,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╰──────────────────────╯
 │ ${config.prefix}movie
 │ ${config.prefix}anime
+│ ${config.prefix}anime2
 │ ${config.prefix}emojimix
 ╰──────────────────────╯
 
@@ -2701,6 +2703,13 @@ ${config.prefix}setvar <key> <value>
         }
     });
 
+    registerCommand('anime2', 'Download anime episodes', async (sock, msg, args) => {
+        const chatId = msg.key.remoteJid;
+        const query = args.join(' ').trim();
+
+        await anime2.handleAnime2Command(sock, chatId, query, msg);
+    });
+
     /* moved to features/group.js */
     /* registerCommand('warnlimit', 'Set warn limit for this group', async (sock, msg, args) => {
         if (!Permissions.isGroup(msg.key.remoteJid)) {
@@ -3215,6 +3224,13 @@ ${config.prefix}setvar <key> <value>
 
                     return; // Don't process as a command
                 }
+            }
+
+            // Check for anime2 download reply
+            const storageKeyAnime2Reply = `${chatId}:${userId}`;
+            const handled = await anime2.handleAnime2Selection(sock, chatId, messageText.trim(), msg);
+            if (handled) {
+                return; // Don't process as a command
             }
 
             // Check for trivia answer (allow all users including owner)
