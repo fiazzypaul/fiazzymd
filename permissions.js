@@ -100,9 +100,22 @@ module.exports = (config) => {
       isSudo = isSudoJid(senderJid);
     } catch {}
     if (isSudo) {
+      // Var commands are owner-only
       if (varCommands.has(cmdName)) {
         return { allowed: false, reason: '❌ Only the bot owner can use this command!' };
       }
+
+      // For group admin commands, sudo users must ALSO be group admins
+      const inGroup = isGroup(msg.key.remoteJid);
+      if (groupAdminCommands.has(cmdName) && inGroup) {
+        const userJid = msg.key.participant;
+        const isAdmin = await isUserAdmin(sock, msg.key.remoteJid, userJid);
+        if (!isAdmin) {
+          return { allowed: false, reason: '❌ Only group admins can use this command!' };
+        }
+      }
+
+      // Sudo can run all other commands
       return { allowed: true };
     }
 
