@@ -98,10 +98,22 @@ module.exports = (config) => {
     try {
       const { isSudoJid } = require('./features/sudo');
       isSudo = isSudoJid(senderJid);
-    } catch {}
+      console.log('🔍 Sudo Check:', {
+        senderJid,
+        isSudo,
+        cmdName,
+        botMode: config.botMode
+      });
+    } catch (err) {
+      console.error('❌ Error checking sudo:', err.message);
+    }
+
     if (isSudo) {
+      console.log(`✅ Sudo user detected for command: ${cmdName} (mode: ${config.botMode})`);
+
       // Var commands are owner-only
       if (varCommands.has(cmdName)) {
+        console.log(`❌ Blocked sudo from var command: ${cmdName}`);
         return { allowed: false, reason: '❌ Only the bot owner can use this command!' };
       }
 
@@ -111,11 +123,14 @@ module.exports = (config) => {
         const userJid = msg.key.participant;
         const isAdmin = await isUserAdmin(sock, msg.key.remoteJid, userJid);
         if (!isAdmin) {
+          console.log(`❌ Sudo user not admin in group for command: ${cmdName}`);
           return { allowed: false, reason: '❌ Only group admins can use this command!' };
         }
+        console.log(`✅ Sudo user is group admin, allowing: ${cmdName}`);
       }
 
-      // Sudo can run all other commands
+      // Sudo can run all other commands (even in private mode!)
+      console.log(`✅ Sudo allowed to run: ${cmdName}`);
       return { allowed: true };
     }
 

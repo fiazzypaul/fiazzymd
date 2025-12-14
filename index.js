@@ -3784,44 +3784,99 @@ ${config.prefix}setvar <key> <value>
         const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
         if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
         const list = sudoFeature.listSudos();
-        const text = list.length ? `👑 *Sudo Users*\n\n${list.map(n => `• ${n}`).join('\n')}` : 'ℹ️ No sudo users set.';
-        await sock.sendMessage(jid, { text });
+        if (!list.length) { await sock.sendMessage(jid, { text: 'ℹ️ No sudo users set.' }); return; }
+        const numbers = list.map(n => String(n));
+        let mentions = numbers.map(n => `${n}@s.whatsapp.net`);
+        try {
+          if (jid.endsWith('@g.us')) {
+            const meta = await sock.groupMetadata(jid);
+            const parts = meta.participants || [];
+            mentions = numbers.map(n => {
+              const match = parts.find(p => (p.id || '').includes(n));
+              return match ? match.id : `${n}@s.whatsapp.net`;
+            });
+          }
+        } catch {}
+        const lines = mentions.map((m, i) => `${i + 1}. @${m.split('@')[0]}`);
+        const text = `👑 *Sudo Users*\n\n${lines.join('\n')}`;
+        await sock.sendMessage(jid, { text, mentions });
       });
-      registerCommand('setsudo', 'Add a sudo user by number only (owner only): .setsudo 234xxx', async (sock, msg, args) => {
+      registerCommand('setsudo', 'Add a sudo user (owner only)', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
         const senderJid = msg.key.participant || msg.key.remoteJid;
         const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
         const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
         const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
         if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
-
-        // Only accept number from args
-        const num = args[0] ? String(args[0]).replace(/[^0-9]/g, '') : '';
-        if (!num) {
-          await sock.sendMessage(jid, { text: '❌ Provide a number.\n\n*Usage:* .setsudo 2349133961422' });
-          return;
-        }
-
-        const ok = sudoFeature.addSudo(num);
-        await sock.sendMessage(jid, { text: ok ? `✅ Added sudo: ${num}` : '❌ Failed to add sudo' });
+        let num = '';
+        const ctx = msg.message?.extendedTextMessage?.contextInfo;
+        if (args[0]) num = String(args[0]).replace(/[^0-9]/g, '');
+        if (!num && ctx?.participant) num = ctx.participant.split('@')[0].replace(/[^0-9]/g, '');
+        if (!num && Array.isArray(ctx?.mentionedJid) && ctx.mentionedJid.length) num = ctx.mentionedJid[0].split('@')[0].replace(/[^0-9]/g, '');
+        if (!num) { await sock.sendMessage(jid, { text: '❌ Provide a number or reply/tag a user.' }); return; }
+        const current = sudoFeature.listSudos();
+        const already = current.includes(num);
+        const ok = already ? false : sudoFeature.addSudo(num);
+        const list = sudoFeature.listSudos();
+        let targetMention = `${String(num)}@s.whatsapp.net`;
+        let mentions = list.map(n => `${String(n)}@s.whatsapp.net`);
+        try {
+          if (jid.endsWith('@g.us')) {
+            const meta = await sock.groupMetadata(jid);
+            const parts = meta.participants || [];
+            const match = parts.find(p => (p.id || '').includes(String(num)));
+            if (match) targetMention = match.id;
+            mentions = list.map(n => {
+              const m2 = parts.find(p => (p.id || '').includes(String(n)));
+              return m2 ? m2.id : `${String(n)}@s.whatsapp.net`;
+            });
+          }
+        } catch {}
+        const lines = mentions.map((m, i) => `${i + 1}. @${m.split('@')[0]}`);
+        const head = already ? `ℹ️ Already sudo: @${targetMention.split('@')[0]}` : `✅ Added sudo: @${targetMention.split('@')[0]}`;
+        const text = `${head}\n\n👑 *Sudo Users*\n\n${lines.join('\n')}`;
+        const allMentions = Array.from(new Set([targetMention, ...mentions]));
+        await sock.sendMessage(jid, { text, mentions: allMentions });
       });
-      registerCommand('delsudo', 'Remove a sudo user by number only (owner only): .delsudo 234xxx', async (sock, msg, args) => {
+      registerCommand('delsudo', 'Remove a sudo user (owner only)', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
         const senderJid = msg.key.participant || msg.key.remoteJid;
         const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
         const normalizedSender = senderJid.split('@')[0].replace(/[^0-9]/g, '');
         const isOwner = normalizedSender === normalizedOwner || senderJid.includes(normalizedOwner) || msg.key.fromMe;
         if (!isOwner) { await sock.sendMessage(jid, { text: '❌ Owner only.' }); return; }
-
-        // Only accept number from args
-        const num = args[0] ? String(args[0]).replace(/[^0-9]/g, '') : '';
-        if (!num) {
-          await sock.sendMessage(jid, { text: '❌ Provide a number.\n\n*Usage:* .delsudo 2349133961422' });
-          return;
-        }
-
+        let num = '';
+        const ctx = msg.message?.extendedTextMessage?.contextInfo;
+        if (args[0]) num = String(args[0]).replace(/[^0-9]/g, '');
+        if (!num && ctx?.participant) num = ctx.participant.split('@')[0].replace(/[^0-9]/g, '');
+        if (!num && Array.isArray(ctx?.mentionedJid) && ctx.mentionedJid.length) num = ctx.mentionedJid[0].split('@')[0].replace(/[^0-9]/g, '');
+        if (!num) { await sock.sendMessage(jid, { text: '❌ Provide a number or reply/tag a user.' }); return; }
         const ok = sudoFeature.removeSudo(num);
-        await sock.sendMessage(jid, { text: ok ? `✅ Removed sudo: ${num}` : 'ℹ️ Not found' });
+        if (!ok) { await sock.sendMessage(jid, { text: 'ℹ️ Not found' }); return; }
+        const list = sudoFeature.listSudos();
+        let targetMention = `${String(num)}@s.whatsapp.net`;
+        let mentions = list.map(n => `${String(n)}@s.whatsapp.net`);
+        try {
+          if (jid.endsWith('@g.us')) {
+            const meta = await sock.groupMetadata(jid);
+            const parts = meta.participants || [];
+            const match = parts.find(p => (p.id || '').includes(String(num)));
+            if (match) targetMention = match.id;
+            mentions = list.map(n => {
+              const m2 = parts.find(p => (p.id || '').includes(String(n)));
+              return m2 ? m2.id : `${String(n)}@s.whatsapp.net`;
+            });
+          }
+        } catch {}
+        if (!list.length) {
+          const text = `✅ Removed sudo: @${targetMention.split('@')[0]}\n\n👑 *Sudo Users*\n\nℹ️ No sudo users set.`;
+          await sock.sendMessage(jid, { text, mentions: [targetMention] });
+          return;
+        }
+        const lines = mentions.map((m, i) => `${i + 1}. @${m.split('@')[0]}`);
+        const text = `✅ Removed sudo: @${targetMention.split('@')[0]}\n\n👑 *Sudo Users*\n\n${lines.join('\n')}`;
+        const allMentions = Array.from(new Set([targetMention, ...mentions]));
+        await sock.sendMessage(jid, { text, mentions: allMentions });
       });
       registerCommand('flirt', 'Send a random flirt message', async (sock, msg) => {
         const chatId = msg.key.remoteJid;
