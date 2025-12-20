@@ -3013,14 +3013,20 @@ ${config.prefix}setvar <key> <value>
                     
                     if (antiwordsResult.found) {
                         console.log(`Antiword detected in ${msg.key.remoteJid}: ${antiwordsResult.words.join(', ')}`);
-                        
-                        // First, delete the offensive message
+                        let isAdmin = false;
                         try {
-                            await sock.sendMessage(msg.key.remoteJid, {
-                                delete: msg.key
+                            const meta = await sock.groupMetadata(msg.key.remoteJid);
+                            const sender = msg.key.participant || msg.key.remoteJid;
+                            const sn = String(sender).split('@')[0].replace(/[^0-9]/g, '');
+                            const parts = meta.participants || [];
+                            const match = parts.find(p => {
+                                const pn = String(p.id || '').split('@')[0].replace(/[^0-9]/g, '');
+                                return p.id === sender || pn === sn || (p.id || '').includes(sn);
                             });
-                        } catch (error) {
-                            console.error('Failed to delete antiword message:', error);
+                            isAdmin = !!(match && match.admin);
+                        } catch {}
+                        if (isAdmin) {
+                            return;
                         }
                         
                         // Take action based on settings
@@ -3042,7 +3048,7 @@ ${config.prefix}setvar <key> <value>
                                     });
                                 }
                                 break;
-                                
+                            
                             case 'warn':
                                 // Use the existing warning system
                                 const limit = warnLimits.get(msg.key.remoteJid) || 3;
@@ -3074,9 +3080,13 @@ ${config.prefix}setvar <key> <value>
                                     });
                                 }
                                 break;
-                                
+                            
                             default:
-                                // For 'null' action, just notify that message was removed
+                                try {
+                                    await sock.sendMessage(msg.key.remoteJid, { delete: msg.key });
+                                } catch (error) {
+                                    console.error('Failed to delete antiword message:', error);
+                                }
                                 await sock.sendMessage(msg.key.remoteJid, {
                                     text: `⚠️ Message removed for containing forbidden words: ${antiwordsResult.words.join(', ')}`
                                 });

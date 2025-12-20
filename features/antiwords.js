@@ -135,8 +135,11 @@ module.exports = function registerAntiwordsCommand({ registerCommand }) {
                 const sender = msg.key.participant || msg.key.remoteJid;
                 const sn = String(sender).split('@')[0].replace(/[^0-9]/g, '');
                 const parts = meta.participants || [];
-                const match = parts.find(p => (p.id || '').includes(sn));
-                isAdmin = match?.admin === 'admin' || match?.admin === 'superadmin';
+                const match = parts.find(p => {
+                    const pn = String(p.id || '').split('@')[0].replace(/[^0-9]/g, '');
+                    return p.id === sender || pn === sn || (p.id || '').includes(sn);
+                });
+                isAdmin = !!(match && match.admin);
             } catch {}
             if (isAdmin) {
                 console.log('🔍 Antiwords bypass: sender is group admin, no action taken');
