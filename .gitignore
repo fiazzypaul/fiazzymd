@@ -28,5 +28,5 @@ downloads/
 docs/
 temp/
 tmp/
-data/
+/data/
 scripts/*.mp4
