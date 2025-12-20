@@ -133,8 +133,10 @@ module.exports = function registerAntiwordsCommand({ registerCommand }) {
             try {
                 const meta = await sock.groupMetadata(groupJid);
                 const sender = msg.key.participant || msg.key.remoteJid;
-                const p = (meta.participants || []).find(x => x.id === sender);
-                isAdmin = p?.admin === 'admin' || p?.admin === 'superadmin';
+                const sn = String(sender).split('@')[0].replace(/[^0-9]/g, '');
+                const parts = meta.participants || [];
+                const match = parts.find(p => (p.id || '').includes(sn));
+                isAdmin = match?.admin === 'admin' || match?.admin === 'superadmin';
             } catch {}
             if (isAdmin) {
                 console.log('🔍 Antiwords bypass: sender is group admin, no action taken');
