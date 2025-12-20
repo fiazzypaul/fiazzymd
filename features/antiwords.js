@@ -128,6 +128,18 @@ module.exports = function registerAntiwordsCommand({ registerCommand }) {
 
         if (result.found) {
             console.log(`Antiword detected in ${groupJid}: ${result.words.join(', ')}`);
+            // Bypass for group admins: do not delete/kick/warn
+            let isAdmin = false;
+            try {
+                const meta = await sock.groupMetadata(groupJid);
+                const sender = msg.key.participant || msg.key.remoteJid;
+                const p = (meta.participants || []).find(x => x.id === sender);
+                isAdmin = p?.admin === 'admin' || p?.admin === 'superadmin';
+            } catch {}
+            if (isAdmin) {
+                console.log('🔍 Antiwords bypass: sender is group admin, no action taken');
+                return;
+            }
             
             // Take action based on settings
             switch (result.action) {
