@@ -332,7 +332,11 @@ ${inviteLink}
     const limit = warnLimits.get(msg.key.remoteJid) || 3;
     const groupMap = warnCounts.get(msg.key.remoteJid) || new Map();
     const c = (groupMap.get(targetJid) || 0) + 1; groupMap.set(targetJid, c); warnCounts.set(msg.key.remoteJid, groupMap);
-    if (c >= limit) { try { await sockInst.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'remove'); await sockInst.sendMessage(msg.key.remoteJid, { text: `⛔ Warn limit reached. Kicked @${targetJid.split('@')[0]}`, mentions: [targetJid] }); } catch (e) { await sockInst.sendMessage(msg.key.remoteJid, { text: `⚠️ Failed to kick: ${e.message}` }); } } else { await sockInst.sendMessage(msg.key.remoteJid, { text: `⚠️ Warned @${targetJid.split('@')[0]} (${c}/${limit})`, mentions: [targetJid] }); }
+    if (c >= limit) { try { await sockInst.groupParticipantsUpdate(msg.key.remoteJid, [targetJid], 'remove'); await sockInst.sendMessage(msg.key.remoteJid, { text: `⛔ Warn limit reached. Kicked @${targetJid.split('@')[0]}`, mentions: [targetJid] }); } catch (e) { await sockInst.sendMessage(msg.key.remoteJid, { text: `⚠️ Failed to kick: ${e.message}` }); } } else {
+      if (ctx?.stanzaId && ctx?.participant) { try { await sockInst.sendMessage(msg.key.remoteJid, { delete: { remoteJid: msg.key.remoteJid, id: ctx.stanzaId, participant: ctx.participant } }); } catch (e) {}
+      }
+      await sockInst.sendMessage(msg.key.remoteJid, { text: `⚠️ Warned @${targetJid.split('@')[0]} (${c}/${limit})`, mentions: [targetJid] });
+    }
   });
 
   registerCommand('resetwarn', 'Reset warnings for a user', async (sockInst, msg, args) => {

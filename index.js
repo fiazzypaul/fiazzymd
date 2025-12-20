@@ -3056,6 +3056,7 @@ ${config.prefix}setvar <key> <value>
                                 const c = (groupMap.get(msg.key.participant) || 0) + 1;
                                 groupMap.set(msg.key.participant, c);
                                 warnCounts.set(msg.key.remoteJid, groupMap);
+                                try { await sock.sendMessage(msg.key.remoteJid, { delete: msg.key }); } catch (error) {}
                                 
                                 if (c >= limit) {
                                     try {

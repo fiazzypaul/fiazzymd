@@ -1,7 +1,7 @@
 {
   "120363422921970924@g.us": {
-    "enabled": false,
-    "action": "kick",
+    "enabled": true,
+    "action": "null",
     "words": "fuck"
   }
 }
