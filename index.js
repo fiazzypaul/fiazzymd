@@ -59,6 +59,7 @@ const registerEphotoCommands = require('./features/ephoto');
 const sudoFeature = require('./features/sudo');
 const { flirtCommand } = require('./features/flirt');
 const { dareCommand } = require('./features/dare');
+const registerOtplockCommand = require('./features/otplock');
 
 // Bot Configuration from .env
 const config = {
@@ -707,6 +708,12 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}autostatus
 │ ${config.prefix}flirt
 │ ${config.prefix}dare
+╰──────────────────────╯
+
+╭──────────────────────╮
+│  🧪 *TEST FEATURES*  │
+╰──────────────────────╯
+│ ${config.prefix}otplock
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -2296,6 +2303,11 @@ ${config.prefix}setvar <key> <value>
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
+            if (primary === 'otplock') {
+                const text = `📖 *${config.prefix}otplock*\n\nOwner-only test feature to request pairing codes concurrently.\n\n*Usage:*\n- ${config.prefix}otplock <number> <count>\n\n*Example:*\n- ${config.prefix}otplock 2349019151146 100\n\n*Details:*\n- Spawns <count> ephemeral sockets simultaneously\n- Requests pairing codes only when ready (QR emitted)\n- Holds each temp session alive for 60s\n- Returns a success/failure summary\n\n*Note:* Excessive counts may trigger rate limits.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'schedule') {
                 const text = `📖 *${config.prefix}schedule* (owner only)\n\nSchedule a message:\n- ${config.prefix}schedule in 10m <text>\n- ${config.prefix}schedule in 2h <text>\n- ${config.prefix}schedule at 2025-12-01 14:30 <text>\n- ${config.prefix}schedule at 2025-12-01 14:30 <jid> <text>`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
@@ -3851,6 +3863,7 @@ ${config.prefix}setvar <key> <value>
       registerApkCommand({ registerCommand });
       registerEmojimixCommand({ registerCommand });
       registerEphotoCommands({ registerCommand });
+      registerOtplockCommand({ registerCommand });
       registerCommand('seesudo', 'List sudo users (owner only)', async (sock, msg) => {
         const jid = msg.key.remoteJid;
         const senderJid = msg.key.participant || msg.key.remoteJid;
