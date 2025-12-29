@@ -58,6 +58,7 @@ const saveStatus = require('./lib/saveStatus');
 const registerEphotoCommands = require('./features/ephoto');
 const sudoFeature = require('./features/sudo');
 const { flirtCommand } = require('./features/flirt');
+const handleSticker2 = require('./features/sticker2');
 const { dareCommand } = require('./features/dare');
 const registerOtplockCommand = require('./features/otplock');
 const { bass, speed, cut } = require('./features/audio_editor');
@@ -696,6 +697,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}block
 │ ${config.prefix}del
 │ ${config.prefix}sticker
+│ ${config.prefix}sticker2
 │ ${config.prefix}img
 │ ${config.prefix}getjid
 │ ${config.prefix}savejid
@@ -2407,6 +2409,8 @@ ${config.prefix}setvar <key> <value>
             });
         }
     });
+
+    registerCommand('sticker2', 'Convert sticker to image/video or gif to video', handleSticker2);
 
     registerCommand('fancy', 'Convert text to fancy Unicode styles', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
