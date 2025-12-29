@@ -124,6 +124,28 @@ const antiDeleteChats = new Map();
 let connectedAtMs = 0;
 const CONNECT_GRACE_MS = 3000;
 
+const antiLinkFile = path.join(__dirname, 'data', 'antilink.json');
+function ensureDataDirLocal() { try { const dir = path.join(__dirname, 'data'); if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch {} }
+function loadAntiLinkSettingsFromDisk() {
+    try {
+        if (!fs.existsSync(antiLinkFile)) return;
+        const raw = fs.readFileSync(antiLinkFile, 'utf8');
+        const obj = JSON.parse(raw || '{}');
+        Object.entries(obj).forEach(([jid, cfg]) => {
+            if (jid && cfg && typeof cfg === 'object') antiLinkSettings.set(jid, { enabled: !!cfg.enabled, action: cfg.action === 'kick' ? 'kick' : 'warn' });
+        });
+    } catch {}
+}
+function saveAntiLinkSettingsToDisk() {
+    try {
+        ensureDataDirLocal();
+        const obj = {};
+        for (const [jid, cfg] of antiLinkSettings.entries()) { obj[jid] = { enabled: !!(cfg && cfg.enabled), action: (cfg && cfg.action) === 'kick' ? 'kick' : 'warn' }; }
+        fs.writeFileSync(antiLinkFile, JSON.stringify(obj, null, 2), 'utf8');
+    } catch {}
+}
+loadAntiLinkSettingsFromDisk();
+
 // Initialize auto view-once from .env
 if (process.env.AUTO_VIEW_ONCE === 'true') {
     autoViewOnceChats.add('global');
@@ -3520,7 +3542,7 @@ ${config.prefix}setvar <key> <value>
 
     // Register group commands
     try { 
-      registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings }); 
+      registerGroupCommands({ sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings, saveAntiLinkSettings: saveAntiLinkSettingsToDisk }); 
     }
     catch (e) {
       console.error('❌ Failed to register group commands:', e && e.message ? e.message : e);
