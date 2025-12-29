@@ -35,6 +35,11 @@ const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
+            if (primary === 'sticker2') {
+                const text = `📖 *${config.prefix}sticker2*\n\nConvert a sticker to image/video or a gif to video.\n\n*Usage:*\n- Reply to a sticker or gif with ${config.prefix}sticker2\n\n*Features:*\n- Static Sticker → Image (PNG)\n- Animated Sticker → Video (MP4)\n- Gif (Video) → Video (MP4)`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'yts') {
                 const text = `📖 *${config.prefix}yts*\n\nYouTube search.\n\n*Usage:*\n- ${config.prefix}yts <query> → list videos\n- ${config.prefix}yts <youtube_url> → show details\n\n*Example:*\n- ${config.prefix}yts baymax`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
