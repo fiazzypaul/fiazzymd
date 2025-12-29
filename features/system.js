@@ -48,13 +48,12 @@ async function ensureOrigin() {
 async function updateAndRestart() {
   try {
     await ensureOrigin();
-    const { stdout: pullOut, stderr: pullErr } = await execPromise('git pull');
-    if (pullErr && !pullErr.includes('Already up to date.')) {
-      return { success: false, message: `❌ Failed to update. Git Pull Error:\n${pullErr}` };
-    }
-    if ((pullOut || '').includes('Already up to date.') || (pullErr || '').includes('Already up to date.')) {
-      return { success: true, message: '✅ Bot files are already up to date.' };
-    }
+    
+    // Force update strategy: Fetch all and reset hard to origin/HEAD
+    // This overwrites local tracked changes but preserves ignored files (sessions, .env, etc.)
+    await execPromise('git fetch --all');
+    await execPromise('git reset --hard origin/HEAD');
+    
     await execPromise('npm install');
     restartBot();
     return { success: true, message: '✅ Successfully updated and restarting...' };
