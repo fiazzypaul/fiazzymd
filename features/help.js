@@ -10,6 +10,11 @@ const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_
         } else {
             const primary = args[0].toLowerCase();
             const secondary = (args[1] || '').toLowerCase();
+            if (primary === 'pp') {
+                const text = `📖 *${config.prefix}pp* (owner only)\n\nSet the bot's profile picture.\n\n*Usage:*\n- Reply to an image with ${config.prefix}pp`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
             if (primary === 'movie') {
                 const text = `📖 *${config.prefix}movie*\n\n*Usage:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie <query>\n\n*Examples:*\n- ${config.prefix}movie trending\n- ${config.prefix}movie random\n- ${config.prefix}movie inception\n\n*Setup (owner):*\n- ${config.prefix}setvar TMDB_API_KEY <your_tmdb_key>\n- Or add TMDB_API_KEY to your .env file\n\n*Where to get a key:*\n- Create a free account at https://www.themoviedb.org/ and generate an API key (v3).`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
