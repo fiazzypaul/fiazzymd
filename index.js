@@ -2796,14 +2796,29 @@ ${config.prefix}setvar <key> <value>
     // Handle incoming messages
     sock.ev.on('messages.upsert', async (m) => {
         try {
+            // Only handle notify messages (new messages), ignore history sync (append)
+            if (m.type !== 'notify') return;
+
             const msg = m.messages[0];
             if (!msg.message) return;
+            
             const rawTs = msg.messageTimestamp;
             let tsMs = 0;
             if (rawTs !== undefined && rawTs !== null) {
                 const n = Number(rawTs);
                 tsMs = n < 10000000000 ? n * 1000 : n;
             }
+            
+            const now = Date.now();
+            // Strict Timestamp Validation:
+            // 1. Ignore messages older than 2 minutes (prevents processing old pending messages on startup)
+            // 2. Ignore messages from before connection established (safeguard)
+            
+            if (tsMs && (now - tsMs) > 120000) {
+                 console.log(`⏳ Ignoring old message: ${Math.floor((now - tsMs)/1000)}s old`);
+                 return;
+            }
+
             if (connectedAtMs && tsMs && tsMs < (connectedAtMs - CONNECT_GRACE_MS)) return;
             try { presenceTargets.add(msg.key.remoteJid); } catch {}
 
