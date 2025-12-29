@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, downloadMediaMessage, Browsers, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, useMultiFileAuthState, downloadMediaMessage, Browsers, fetchLatestBaileysVersion, jidNormalizedUser } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
 const pino = require('pino');
 const readline = require('readline');
@@ -1079,6 +1079,48 @@ ${config.botMode === 'private' ? '🔒 Private Mode' : '🌐 Public Mode'}`;
         } catch (error) {
             console.error('❌ VV Error:', error);
             await sock.sendMessage(msg.key.remoteJid, { text: `❌ Failed to open view-once: ${error.message}` });
+        }
+    });
+
+    registerCommand('vv2', 'Open view-once and send to your DM', async (sock, msg) => {
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const normalizedOwner = String(config.ownerNumber).replace(/[^0-9]/g, '');
+        let dmJid = jidNormalizedUser(senderJid);
+        if ((senderJid || '').includes(normalizedOwner) || msg.key.fromMe) {
+            let target = null;
+            if ((msg.key.remoteJid || '').endsWith('@g.us')) {
+                try {
+                    const meta = await sock.groupMetadata(msg.key.remoteJid);
+                    const match = (meta.participants || []).find(p => (p.id || '').includes(normalizedOwner));
+                    if (match) target = match.id;
+                } catch {}
+            }
+            dmJid = jidNormalizedUser(target || `${normalizedOwner}@s.whatsapp.net`);
+        }
+
+        let contextInfo = null;
+        const m = msg.message;
+        if (m.extendedTextMessage?.contextInfo) { contextInfo = m.extendedTextMessage.contextInfo; }
+        const quotedMsg = getQuotedMessage(msg);
+        if (!quotedMsg) { await sock.sendMessage(msg.key.remoteJid, { text: `❌ Please reply to a view-once message with ${config.prefix}vv2` }); return; }
+        let checkMsg = quotedMsg;
+        if (checkMsg.ephemeralMessage) { checkMsg = checkMsg.ephemeralMessage.message; }
+        let hasViewOnce = checkMsg.viewOnceMessage || checkMsg.viewOnceMessageV2 || checkMsg.viewOnceMessageV2Extension;
+        if (!hasViewOnce && contextInfo) { hasViewOnce = contextInfo.isViewOnce === true || contextInfo.isViewOnce === 1 || (contextInfo.quotedMessage && (quotedMsg.imageMessage || quotedMsg.videoMessage || quotedMsg.audioMessage)); }
+        const isQuotedMedia = !!(quotedMsg.imageMessage || quotedMsg.videoMessage || quotedMsg.audioMessage);
+        if (!hasViewOnce && !isQuotedMedia) { await sock.sendMessage(msg.key.remoteJid, { text: `❌ That's not a view-once message!` }); return; }
+        let inner = unwrapViewOnce(quotedMsg);
+        if (!inner && (quotedMsg.imageMessage || quotedMsg.videoMessage || quotedMsg.audioMessage)) { inner = quotedMsg; }
+        if (!inner) { await sock.sendMessage(msg.key.remoteJid, { text: `❌ Failed to unwrap view-once message` }); return; }
+        try {
+            const buffer = await downloadMediaMessage({ message: inner }, 'buffer', {}, { logger: pino({ level: 'silent' }) });
+            if (inner.imageMessage) { await sock.sendMessage(dmJid, { image: buffer, caption: 'Opened view-once 👀' }); }
+            else if (inner.videoMessage) { await sock.sendMessage(dmJid, { video: buffer, caption: 'Opened view-once 👀' }); }
+            else if (inner.audioMessage) { await sock.sendMessage(dmJid, { audio: buffer, mimetype: inner.audioMessage.mimetype || 'audio/mpeg', ptt: false, fileName: 'audio' }); }
+            else { await sock.sendMessage(msg.key.remoteJid, { text: `❌ Unsupported view-once media type` }); return; }
+            await sock.sendMessage(msg.key.remoteJid, { text: '✅ Sent to your DM' });
+        } catch (error) {
+            await sock.sendMessage(msg.key.remoteJid, { text: `❌ Failed to process view-once: ${error.message}` });
         }
     });
 
