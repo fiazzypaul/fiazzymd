@@ -1,15 +1,58 @@
 const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_CONTEXT }) => {
     registerCommand('help', 'Show command details', async (sock, msg, args) => {
         if (args.length === 0) {
-            const commandList = Array.from(commands.entries())
-                .map(([name, { description }]) => `• *${config.prefix}${name}* - ${description}`)
-                .join('\n');
+            // Define Categories
+            const categories = {
+                '🎭 Meme': ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner'],
+                '🎬 Media & Stickers': ['sticker', 'sticker2', 'simage', 'gif', 'yts', 'ytvideo', 'movie', 'movies'],
+                '🤖 AI': ['gemini', 'chatgpt', 'img'],
+                '👥 Group': ['group', 'welcome', 'autostatus'],
+                '🛠️ Tools': ['alive', 'weather', 'translate', 'textmaker', 'fancy', 'fancytext', 'emojimix', 'repo', 'getjid', 'savejid'],
+                '🎵 Audio': ['cut', 'bass', 'speed'],
+                '👑 Owner': ['sudo', 'otplock', 'schedule', 'schedules', 'schedulecancel', 'pp', 'setvar', 'wapresence']
+            };
 
-            const helpText = `🤖 *${config.botName} Help*\n\n${commandList}\n\n💡 Use ${config.prefix}help <command> for specific command info`;
+            let helpText = `🤖 *${config.botName} Help*\n\n`;
+
+            const usedCommands = new Set();
+
+            for (const [section, cmds] of Object.entries(categories)) {
+                const sectionCommands = cmds.filter(cmd => commands.has(cmd));
+                if (sectionCommands.length > 0) {
+                    helpText += `*${section}*\n`;
+                    sectionCommands.forEach(cmd => {
+                        const desc = commands.get(cmd).description;
+                        helpText += `• ${config.prefix}${cmd} - ${desc}\n`;
+                        usedCommands.add(cmd);
+                    });
+                    helpText += '\n';
+                }
+            }
+
+            // Others
+            const otherCommands = Array.from(commands.keys()).filter(cmd => !usedCommands.has(cmd));
+            if (otherCommands.length > 0) {
+                helpText += `*📌 Others*\n`;
+                otherCommands.forEach(cmd => {
+                    const desc = commands.get(cmd).description;
+                    helpText += `• ${config.prefix}${cmd} - ${desc}\n`;
+                });
+            }
+
+            helpText += `\n💡 Use ${config.prefix}help <command> for specific command info`;
             await sock.sendMessage(msg.key.remoteJid, { text: helpText });
         } else {
             const primary = args[0].toLowerCase();
             const secondary = (args[1] || '').toLowerCase();
+
+            // Meme Commands Documentation
+            const memeCommands = ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner', 'cry', 'bite', 'happy', 'pat'];
+            if (memeCommands.includes(primary)) {
+                 const text = `📖 *${config.prefix}${primary}*\n\nSend an animated ${primary} GIF.\n\n*Usage:*\n- ${config.prefix}${primary} @user\n- Reply to a user with ${config.prefix}${primary}\n\n*Example:*\n- ${config.prefix}${primary} @fiazzy`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+
             if (primary === 'pp') {
                 const text = `📖 *${config.prefix}pp* (owner only)\n\nSet the bot's profile picture.\n\n*Usage:*\n- Reply to an image with ${config.prefix}pp`;
                 await sock.sendMessage(msg.key.remoteJid, { text });

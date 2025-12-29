@@ -64,6 +64,7 @@ const registerOtplockCommand = require('./features/otplock');
 const { bass, speed, cut } = require('./features/audio_editor');
 const registerHelpCommand = require('./features/help');
 const registerOwnerCommands = require('./features/pp');
+const registerMemeCommands = require('./features/meme');
 
 // Bot Configuration from .env
 const config = {
@@ -2275,6 +2276,7 @@ ${config.prefix}setvar <key> <value>
 
     registerHelpCommand({ sock, config, commands, registerCommand, CHANNEL_CONTEXT });
     registerOwnerCommands({ registerCommand, sock, config });
+    registerMemeCommands({ registerCommand, sock, config });
 
     registerCommand('session', 'View current session info', async (sock, msg) => {
         await sock.sendMessage(msg.key.remoteJid, {
