@@ -1,6 +1,6 @@
 // const { enableWelcome, disableWelcome } = require('./welcome');
 module.exports = function registerGroupCommands(params) {
-  const { sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings } = params;
+  const { sock, config, Permissions, registerCommand, muteTimers, warnLimits, warnCounts, antiLinkSettings, saveAntiLinkSettings } = params;
   const sockInst = sock;
   const isGroup = Permissions.isGroup;
   const isUserAdmin = (sockInst, groupJid, userJid) => {
@@ -357,8 +357,8 @@ ${inviteLink}
   registerCommand('antilink', 'Toggle anti-link for this chat', async (sockInst, msg, args) => {
     if (!isGroup(msg.key.remoteJid)) { await sockInst.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' }); return; }
     const sub = (args[0] || '').toLowerCase(); const actionArg = (args[1] || '').toLowerCase(); const current = antiLinkSettings.get(msg.key.remoteJid) || { enabled: false, action: 'warn' };
-    if (sub === 'on') { current.enabled = true; current.action = actionArg === 'kick' ? 'kick' : 'warn'; antiLinkSettings.set(msg.key.remoteJid, current); await sockInst.sendMessage(msg.key.remoteJid, { text: `✅ Anti-link enabled (${current.action})` }); }
-    else if (sub === 'off') { current.enabled = false; antiLinkSettings.set(msg.key.remoteJid, current); await sockInst.sendMessage(msg.key.remoteJid, { text: '✅ Anti-link disabled' }); }
+    if (sub === 'on') { current.enabled = true; current.action = actionArg === 'kick' ? 'kick' : 'warn'; antiLinkSettings.set(msg.key.remoteJid, current); if (typeof saveAntiLinkSettings === 'function') { try { saveAntiLinkSettings(); } catch {} } await sockInst.sendMessage(msg.key.remoteJid, { text: `✅ Anti-link enabled (${current.action})` }); }
+    else if (sub === 'off') { current.enabled = false; antiLinkSettings.set(msg.key.remoteJid, current); if (typeof saveAntiLinkSettings === 'function') { try { saveAntiLinkSettings(); } catch {} } await sockInst.sendMessage(msg.key.remoteJid, { text: '✅ Anti-link disabled' }); }
     else { await sockInst.sendMessage(msg.key.remoteJid, { text: `📊 Anti-link is ${current.enabled ? 'ON' : 'OFF'} (${current.action})\n\nUse ${config.prefix}antilink on [warn|kick] or ${config.prefix}antilink off` }); }
   });
 
