@@ -22,8 +22,11 @@ const downloadMedia = async (msg) => {
 
 /**
  * Helper to process audio with ffmpeg
+ * @param {Buffer} buffer - Input media buffer
+ * @param {Object|Array} options - Processing options. Can be array of filters (legacy) or options object.
+ * @param {boolean} isVideo - Is input video
  */
-const processAudio = (buffer, filters, isVideo = false) => {
+const processAudio = (buffer, options, isVideo = false) => {
     return new Promise((resolve, reject) => {
         const tempInput = path.join(process.cwd(), 'temp', `input_${Date.now()}_${Math.random().toString(36).substring(7)}.${isVideo ? 'mp4' : 'mp3'}`);
         const tempOutput = path.join(process.cwd(), 'temp', `output_${Date.now()}_${Math.random().toString(36).substring(7)}.mp3`);
@@ -35,7 +38,32 @@ const processAudio = (buffer, filters, isVideo = false) => {
 
         fs.writeFileSync(tempInput, buffer);
 
-        const ffmpegCommand = ffmpeg(tempInput)
+        const ffmpegCommand = ffmpeg(tempInput);
+
+        // Handle legacy filter array
+        let filters = [];
+        let startTime = null;
+        let duration = null;
+
+        if (Array.isArray(options)) {
+            filters = options;
+        } else if (typeof options === 'object') {
+            filters = options.filters || [];
+            startTime = options.startTime;
+            duration = options.duration;
+        }
+
+        // Apply start time (seeking)
+        if (startTime) {
+            ffmpegCommand.setStartTime(startTime);
+        }
+
+        // Apply duration/end
+        if (duration) {
+            ffmpegCommand.setDuration(duration);
+        }
+
+        ffmpegCommand
             .audioCodec('libmp3lame')
             .audioBitrate('128k')
             .format('mp3');
@@ -66,6 +94,102 @@ const processAudio = (buffer, filters, isVideo = false) => {
             })
             .save(tempOutput);
     });
+};
+
+/**
+ * Helper to parse time string to seconds
+ * Supports: "1.30" (1m30s), "90" (90s), "1:30" (1m30s)
+ * Rule: If "." is present, treat as MM.SS. If no ".", treat as seconds.
+ */
+const parseTime = (input) => {
+    if (!input) return null;
+    input = String(input).trim();
+    
+    // Check for MM:SS
+    if (input.includes(':')) {
+        const parts = input.split(':');
+        const mins = parseInt(parts[0] || '0');
+        const secs = parseInt(parts[1] || '0');
+        return (mins * 60) + secs;
+    }
+
+    // Check for MM.SS (User specific rule: dot implies minutes)
+    if (input.includes('.')) {
+        const parts = input.split('.');
+        const mins = parseInt(parts[0] || '0');
+        const secs = parseInt(parts[1] || '0');
+        return (mins * 60) + secs;
+    }
+    
+    // Treat as raw seconds if just a number (no dot)
+    return parseFloat(input);
+};
+
+const cut = async (sock, msg, args) => {
+    const quotedMsg = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    
+    if (!quotedMsg || (!quotedMsg.audioMessage && !quotedMsg.videoMessage)) {
+        await sock.sendMessage(msg.key.remoteJid, { text: `❌ Please reply to an audio or video message with .cut start,end (e.g., .cut 1.0,1.30)` });
+        return;
+    }
+
+    // Parse args
+    // Users might use comma or space
+    // .cut 1.0,1.30 -> args=["1.0,1.30"]
+    // .cut 1.0 1.30 -> args=["1.0", "1.30"]
+    let startStr, endStr;
+    const fullArgs = args.join(' ');
+    
+    if (fullArgs.includes(',')) {
+        [startStr, endStr] = fullArgs.split(',');
+    } else {
+        startStr = args[0];
+        endStr = args[1];
+    }
+
+    const startTime = parseTime(startStr);
+    const endTime = parseTime(endStr);
+
+    if (startTime === null || endTime === null || isNaN(startTime) || isNaN(endTime)) {
+         await sock.sendMessage(msg.key.remoteJid, { text: `❌ Invalid time format. Use .cut start,end (e.g. .cut 1.0,1.30 for 1m to 1m30s)` });
+         return;
+    }
+
+    if (startTime >= endTime) {
+        await sock.sendMessage(msg.key.remoteJid, { text: `❌ Start time must be less than end time.` });
+        return;
+    }
+
+    const duration = endTime - startTime;
+
+    await sock.sendMessage(msg.key.remoteJid, { text: `✂️ Cutting audio from ${startTime}s to ${endTime}s (Duration: ${duration}s)...` });
+
+    try {
+        let mediaMsg = quotedMsg.audioMessage ? quotedMsg : quotedMsg.videoMessage ? quotedMsg : null;
+         // Handle view once
+         if (quotedMsg.viewOnceMessage || quotedMsg.viewOnceMessageV2) {
+            const inner = quotedMsg.viewOnceMessage?.message || quotedMsg.viewOnceMessageV2?.message;
+            if (inner.audioMessage || inner.videoMessage) mediaMsg = inner;
+       }
+
+        const buffer = await downloadMedia(mediaMsg);
+        const isVideo = !!(mediaMsg.videoMessage);
+
+        const processedBuffer = await processAudio(buffer, {
+            startTime: startTime,
+            duration: duration
+        }, isVideo);
+
+        await sock.sendMessage(msg.key.remoteJid, {
+            audio: processedBuffer,
+            mimetype: 'audio/mpeg',
+            ptt: false
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error('Cut audio error:', error);
+        await sock.sendMessage(msg.key.remoteJid, { text: `❌ Failed to cut audio: ${error.message}` });
+    }
 };
 
 const bass = async (sock, msg, args) => {
@@ -195,4 +319,4 @@ const speed = async (sock, msg, args) => {
     }
 };
 
-module.exports = { bass, speed };
+module.exports = { bass, speed, cut };

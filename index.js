@@ -60,7 +60,7 @@ const sudoFeature = require('./features/sudo');
 const { flirtCommand } = require('./features/flirt');
 const { dareCommand } = require('./features/dare');
 const registerOtplockCommand = require('./features/otplock');
-const { bass, speed } = require('./features/audio_editor');
+const { bass, speed, cut } = require('./features/audio_editor');
 
 // Bot Configuration from .env
 const config = {
@@ -735,6 +735,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}reverse
 │ ${config.prefix}bass
 │ ${config.prefix}speed
+│ ${config.prefix}cut
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1801,6 +1802,10 @@ ${config.prefix}setvar <key> <value>
         await speed(sock, msg, args);
     });
 
+    registerCommand('cut', 'Cut audio (e.g., .cut 1.0,1.30)', async (sock, msg, args) => {
+        await cut(sock, msg, args);
+    });
+
     // Register Text Maker commands
     registerCommand('metallic', 'Generate 3D metal text effect', async (sock, msg, args) => {
         const text = args.join(' ');
@@ -2362,6 +2367,21 @@ ${config.prefix}setvar <key> <value>
             }
             if (primary === 'setvar' && secondary === 'gemini') {
                 const text = `📖 *${config.prefix}setvar gemini <API_KEY>*\n\nSets GEMINI_API_KEY in .env and initializes Gemini.\n\nExample:\n- ${config.prefix}setvar gemini abc123...\n\nOwner only.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'cut') {
+                const text = `📖 *${config.prefix}cut*\\n\\nCut audio segments with precision.\\n\\n*Usage:*\\n- ${config.prefix}cut start,end\\n\\n*Time Formats:*\\n- 1.30 → 1 minute 30 seconds\\n- 90 → 90 seconds\\n\\n*Examples:*\\n- ${config.prefix}cut 1.0,1.30 (Cut from 1m to 1m30s)\\n- ${config.prefix}cut 10,20 (Cut from 10s to 20s)\\n\\n*Note:* Reply to an audio/video message.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'bass') {
+                 const text = `📖 *${config.prefix}bass*\\n\\nBoost audio bass level.\\n\\n*Usage:*\\n- ${config.prefix}bass <percentage>\\n\\n*Examples:*\\n- ${config.prefix}bass 20 (Increase by 20%)\\n- ${config.prefix}bass 50% (Increase by 50%)\\n\\n*Note:* Reply to an audio message.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'speed') {
+                 const text = `📖 *${config.prefix}speed*\\n\\nChange audio playback speed.\\n\\n*Usage:*\\n- ${config.prefix}speed <multiplier>\\n\\n*Examples:*\\n- ${config.prefix}speed 1.5x (Fast)\\n- ${config.prefix}speed 0.5 (Slow)\\n\\n*Note:* Reply to an audio message.`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }
