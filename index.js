@@ -65,6 +65,7 @@ const { bass, speed, cut } = require('./features/audio_editor');
 const registerHelpCommand = require('./features/help');
 const registerOwnerCommands = require('./features/pp');
 const registerMemeCommands = require('./features/meme');
+const registerNsfwCommands = require('./features/nsfw');
 
 // Bot Configuration from .env
 const config = {
@@ -3910,6 +3911,12 @@ ${config.prefix}setvar <key> <value>
         if (!isOwner) { await sock.sendMessage(msg.key.remoteJid, { text: `❌ Owner only.\n\n${CHANNEL_URL}` }); return; }
         await autoStatus.autoStatusCommand(sock, msg.key.remoteJid, msg, args);
       });
+
+      // Register Meme Commands
+      registerMemeCommands({ registerCommand, sock, config });
+      
+      // Register NSFW Commands
+      registerNsfwCommands({ registerCommand, sock, config });
     }
     catch (e) {
       console.error('❌ Failed to register apk command:', e && e.message ? e.message : e);

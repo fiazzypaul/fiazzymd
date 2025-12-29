@@ -82,7 +82,7 @@ const convertGifToMp4 = async (gifUrl) => {
 };
 
 const registerMemeCommands = ({ registerCommand, sock, config }) => {
-    const commands = ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner'];
+    const commands = ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner', 'cry', 'bite', 'happy', 'pat'];
 
     commands.forEach(cmd => {
         registerCommand(cmd, `Send a ${cmd} GIF`, async (sock, msg, args) => {

@@ -3,7 +3,8 @@ const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_
         if (args.length === 0) {
             // Define Categories
             const categories = {
-                '🎭 Meme': ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner'],
+                '🎭 Meme': ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner', 'cry', 'bite', 'happy', 'pat'],
+                '🔞 NSFW': ['goon1', 'goon2'],
                 '🎬 Media & Stickers': ['sticker', 'sticker2', 'simage', 'gif', 'yts', 'ytvideo', 'movie', 'movies'],
                 '🤖 AI': ['gemini', 'chatgpt', 'img'],
                 '👥 Group': ['group', 'welcome', 'autostatus'],
