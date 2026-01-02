@@ -249,6 +249,31 @@ ${inviteLink}
     } catch (e) { await sockInst.sendMessage(msg.key.remoteJid, { text: `❌ Failed: ${e.message}` }); }
   });
 
+  registerCommand('kickgroup', 'Remove all members (including admins) except owner', async (sockInst, msg) => {
+    if (!isGroup(msg.key.remoteJid)) { await sockInst.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' }); return; }
+    const ownerBypass = isOwnerMsg(msg);
+    if (!ownerBypass) { const admin = await isUserAdmin(sockInst, msg.key.remoteJid, msg.key.participant); if (!admin) { await sockInst.sendMessage(msg.key.remoteJid, { text: '❌ Only admins can use this command!' }); return; } }
+    try {
+      const meta = await sockInst.groupMetadata(msg.key.remoteJid);
+      const botJid = sockInst.user.id.split(':')[0] + '@s.whatsapp.net';
+      const groupOwner = meta.owner || meta.subjectOwner;
+      
+      const toKick = meta.participants.filter(p => {
+        // Exclude bot itself
+        if (p.id === botJid) return false;
+        // Exclude group owner
+        if (groupOwner && p.id === groupOwner) return false;
+        return true;
+      }).map(p => p.id);
+
+      if (!toKick.length) { await sockInst.sendMessage(msg.key.remoteJid, { text: '❌ No members to remove' }); return; }
+      
+      await sockInst.sendMessage(msg.key.remoteJid, { text: `⏳ Removing ${toKick.length} members (admins included)...` });
+      await sockInst.groupParticipantsUpdate(msg.key.remoteJid, toKick, 'remove');
+      await sockInst.sendMessage(msg.key.remoteJid, { text: `✅ Removed ${toKick.length} members` });
+    } catch (e) { await sockInst.sendMessage(msg.key.remoteJid, { text: `❌ Failed: ${e.message}` }); }
+  });
+
   registerCommand('promote', 'Promote a member to admin', async (sockInst, msg, args) => {
     if (!isGroup(msg.key.remoteJid)) { await sockInst.sendMessage(msg.key.remoteJid, { text: '❌ This command is only for groups!' }); return; }
     const ownerBypass = isOwnerMsg(msg);

@@ -7,7 +7,7 @@ const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_
                 '🔞 NSFW': ['goon1', 'goon2'],
                 '🎬 Media & Stickers': ['sticker', 'sticker2', 'simage', 'gif', 'yts', 'ytvideo', 'movie', 'movies'],
                 '🤖 AI': ['gemini', 'chatgpt', 'img'],
-                '👥 Group': ['group', 'welcome', 'autostatus'],
+                '👥 Group': ['add', 'kick', 'kickall', 'kickgroup', 'promote', 'demote', 'tag', 'tagall', 'invite', 'mute', 'unmute', 'welcome', 'autostatus', 'warn', 'resetwarn', 'antilink', 'revoke', 'ginfo', 'join'],
                 '🛠️ Tools': ['alive', 'weather', 'translate', 'textmaker', 'fancy', 'fancytext', 'emojimix', 'repo', 'getjid', 'savejid'],
                 '🎵 Audio': ['cut', 'bass', 'speed'],
                 '👑 Owner': ['sudo', 'otplock', 'schedule', 'schedules', 'schedulecancel', 'pp', 'setvar', 'wapresence']
