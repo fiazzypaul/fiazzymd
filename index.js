@@ -670,6 +670,8 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 ╰──────────────────────╯
 │ ${config.prefix}add
 │ ${config.prefix}kick
+│ ${config.prefix}kickall
+│ ${config.prefix}kickgroup
 │ ${config.prefix}promote
 │ ${config.prefix}demote
 │ ${config.prefix}tag
