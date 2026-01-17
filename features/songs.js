@@ -79,7 +79,11 @@ async function downloadAudio(url, title) {
         const response = await axios.get(downloadUrl, {
             responseType: 'stream',
             timeout: 120000, // 2 minutes
-            maxContentLength: 100 * 1024 * 1024 // 100MB limit
+            maxContentLength: 100 * 1024 * 1024, // 100MB limit
+            decompress: true,
+            headers: {
+                'Accept-Encoding': 'identity'
+            }
         });
 
         const writer = fs.createWriteStream(filePath);

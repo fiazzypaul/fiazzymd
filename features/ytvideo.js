@@ -93,6 +93,10 @@ async function streamVideo(url) {
             timeout: 600000, // 10 minutes
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
+            decompress: true,
+            headers: {
+                'Accept-Encoding': 'identity'
+            }
         });
 
         const size = parseInt(response.headers['content-length'] || '0');
@@ -156,6 +160,10 @@ async function downloadVideo(url, title, downloadId = null, progressCallback = n
             responseType: 'stream',
             timeout: 900000,
             maxContentLength: Infinity,
+            decompress: true,
+            headers: {
+                'Accept-Encoding': 'identity'
+            }
         });
 
         const totalSize = parseInt(response.headers['content-length'] || '0');
