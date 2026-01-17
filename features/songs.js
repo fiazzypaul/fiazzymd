@@ -4,6 +4,9 @@ const axios = require('axios');
 const fs = require('fs');
 const fsPromises = require('fs/promises');
 const path = require('path');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execPromise = promisify(exec);
 
 // Store user search sessions
 const searchSessions = new Map();
@@ -73,9 +76,10 @@ async function downloadAudio(url, title) {
         const timestamp = Date.now();
         const filename = `${safeTitle}_${timestamp}.mp3`;
         const filePath = path.join(downloadsDir, filename);
+        const tempPath = path.join(downloadsDir, `${safeTitle}_${timestamp}.src`);
 
-        // Download to file
-        console.log('📥 Downloading audio to:', filePath);
+        // Download raw audio to temp file
+        console.log('📥 Downloading raw audio to:', tempPath);
         const response = await axios.get(downloadUrl, {
             responseType: 'stream',
             timeout: 120000, // 2 minutes
@@ -86,7 +90,7 @@ async function downloadAudio(url, title) {
             }
         });
 
-        const writer = fs.createWriteStream(filePath);
+        const writer = fs.createWriteStream(tempPath);
         response.data.pipe(writer);
 
         await new Promise((resolve, reject) => {
@@ -94,7 +98,19 @@ async function downloadAudio(url, title) {
             writer.on('error', reject);
         });
 
-        console.log('✅ Audio downloaded successfully');
+        console.log('✅ Raw audio downloaded, converting to MP3 with ffmpeg...');
+
+        // Convert to proper MP3 so WhatsApp can play it
+        await execPromise(`ffmpeg -y -i "${tempPath}" -vn -acodec libmp3lame -q:a 2 "${filePath}"`);
+
+        // Cleanup temp source file
+        try {
+            await fsPromises.unlink(tempPath);
+        } catch (e) {
+            console.error('Failed to delete temp audio file:', e);
+        }
+
+        console.log('✅ Audio converted to MP3:', filePath);
 
         // Return file path and cleanup function
         return {
