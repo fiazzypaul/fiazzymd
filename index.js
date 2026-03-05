@@ -666,6 +666,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ Prefix: ${config.prefix}
 │ Mode: ${config.botMode.toUpperCase()}
 │ Commands: ${commands.size}
+│ Version: 2.0.0
 ╰─────────────────────╯
 
 ╭──────────────────────╮
