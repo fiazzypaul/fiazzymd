@@ -66,8 +66,9 @@ const registerHelpCommand = require('./features/help');
 const registerOwnerCommands = require('./features/pp');
 const registerMemeCommands = require('./features/meme');
 const registerNsfwCommands = require('./features/nsfw');
-const spotify = require('./features/spotify');
 const lyrics = require('./features/lyrics');
+const shazam = require('./features/shazam');
+const spotify = require('./features/spotify');
 
 // Bot Configuration from .env
 const config = {
@@ -748,6 +749,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}speed
 │ ${config.prefix}cut
 │ ${config.prefix}lyrics
+│ ${config.prefix}shazam
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -1774,6 +1776,10 @@ ${config.prefix}setvar <key> <value>
     registerCommand('lyrics', 'Search for song lyrics', async (sock, msg, args) => {
         const query = args.join(' ').trim();
         await lyrics.lyricsCommand(sock, msg, query);
+    });
+
+    registerCommand('shazam', 'Identify song from audio or video', async (sock, msg) => {
+        await shazam.shazamCommand(sock, msg);
     });
 
     registerCommand('speed', 'Change audio speed (e.g., 1.5x, 2x, 0.5x)', async (sock, msg, args) => {
