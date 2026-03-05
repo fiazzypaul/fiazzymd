@@ -1,4 +1,6 @@
 const mumaker = require('mumaker');
+const axios = require('axios');
+const sharp = require('sharp');
 
 /**
  * Generate stylized text images using various effects
@@ -130,9 +132,27 @@ async function textmakerCommand(sock, msg, text, type) {
                 throw new Error('No image URL received from the API');
             }
 
+            // Crop the watermark from the bottom (3%)
+            let imageBuffer;
+            try {
+                const response = await axios.get(result.image, { responseType: 'arraybuffer' });
+                const originalBuffer = Buffer.from(response.data);
+                
+                const metadata = await sharp(originalBuffer).metadata();
+                const cropHeight = Math.floor(metadata.height * 0.95); // Keep 95% of the height (crop 3% from bottom)
+                
+                imageBuffer = await sharp(originalBuffer)
+                    .extract({ left: 0, top: 0, width: metadata.width, height: cropHeight })
+                    .toBuffer();
+            } catch (cropErr) {
+                console.error('Failed to crop watermark, sending original image:', cropErr);
+                // Fallback to original image URL if cropping fails
+                imageBuffer = { url: result.image };
+            }
+
             // Send the generated image
             await sock.sendMessage(chatId, {
-                image: { url: result.image },
+                image: imageBuffer instanceof Buffer ? imageBuffer : imageBuffer,
                 caption: `✅ *${type.toUpperCase()} TEXT EFFECT*\n\n📝 Text: ${text}\n\n💡 Powered by FiazzyMD`
             }, { quoted: msg });
 
