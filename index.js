@@ -52,7 +52,7 @@ const convertStickerToImage = require('./features/simage');
 const registerMediafireCommand = require('./features/mediafire');
 const registerAntiwordsCommand = require('./features/antiwords');
 const { extractAudioToMp3, reverseMedia } = require('./lib/audio');
-const registerApkCommand = require('./features/apk');
+const apk = require('./features/apk');
 const registerEmojimixCommand = require('./features/emojimix');
 const saveStatus = require('./lib/saveStatus');
 const registerEphotoCommands = require('./features/ephoto');
@@ -736,6 +736,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}yts
 │ ${config.prefix}mediafire
 │ ${config.prefix}apk
+│ ${config.prefix}spotify
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -746,6 +747,7 @@ async function connectToWhatsApp(usePairingCode, sessionPath) {
 │ ${config.prefix}bass
 │ ${config.prefix}speed
 │ ${config.prefix}cut
+│ ${config.prefix}lyrics
 ╰──────────────────────╯
 
 ╭──────────────────────╮
@@ -3238,6 +3240,50 @@ ${config.prefix}setvar <key> <value>
                 }
             }
 
+            // Check for APK download reply
+            const storageKeyApkReply = `${chatId}:${userId}`;
+            const apkSession = apk.getSearchSession(storageKeyApkReply);
+            if (apkSession) {
+                const trimmed = messageText.trim();
+                
+                if (trimmed === '1') {
+                    const result = apkSession.result;
+                    try {
+                        await sock.sendMessage(chatId, {
+                            text: `📦 *DOWNLOADING APK*\n\n📝 Name: ${result.name}\n⏳ Please wait...`
+                        });
+
+                        const apkData = await apk.downloadApk(result.downloadLink, result.name);
+
+                        // Send the APK file as a document
+                        await sock.sendMessage(chatId, {
+                            document: { url: apkData.filePath },
+                            mimetype: 'application/vnd.android.package-archive',
+                            fileName: `${apkData.name}.apk`,
+                            caption: `✅ *Download Complete!*\n\n📦 ${apkData.name}`
+                        }, { quoted: msg });
+
+                        // Delete file after sending
+                        await apkData.cleanup();
+
+                        // Clear session
+                        apk.clearSearchSession(storageKeyApkReply);
+
+                    } catch (error) {
+                        console.error('❌ APK download error:', error);
+                        await sock.sendMessage(chatId, {
+                            text: `❌ Failed to download APK!\n\n` +
+                                  `Error: ${error.message}`
+                        });
+                    }
+                    return;
+                } else if (trimmed === '2') {
+                    await sock.sendMessage(chatId, { text: '❌ Download cancelled.' });
+                    apk.clearSearchSession(storageKeyApkReply);
+                    return;
+                }
+            }
+
             // Check for video download reply (shared by yts and ytvideo)
             const storageKeyVidReply = `${chatId}:${userId}`;
             const videoSession = ytvideo.getSearchSession(storageKeyVidReply);
@@ -3826,6 +3872,45 @@ ${config.prefix}setvar <key> <value>
         });
     });
 
+    // APK Download Command
+    registerCommand('apk', 'Search and download Android APK files', async (sock, msg, args) => {
+        if (args.length === 0) {
+            await sock.sendMessage(msg.key.remoteJid, {
+                text: `📦 *APK DOWNLOADER*\n\n` +
+                      `*Usage:* ${config.prefix}apk <app name>\n\n` +
+                      `*Example:* ${config.prefix}apk whatsapp\n\n` +
+                      `💡 After search, reply with 1 to download or 2 to cancel`
+            });
+            return;
+        }
+
+        const query = args.join(' ');
+        const userId = msg.key.participant || msg.key.remoteJid;
+        const chatId = msg.key.remoteJid;
+
+        try {
+            await sock.sendMessage(chatId, { text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...` });
+
+            const result = await apk.searchApk(query);
+
+            const storageKeyApk = `${chatId}:${userId}`;
+            apk.storeSearchSession(storageKeyApk, result);
+
+            // Send icon with details
+            await sock.sendMessage(chatId, {
+                image: { url: result.icon },
+                caption: apk.formatApkResult(result)
+            }, { quoted: msg });
+
+        } catch (error) {
+            console.error('❌ APK search error:', error);
+            await sock.sendMessage(chatId, {
+                text: `❌ Failed to search for APK!\n\n` +
+                      `Error: ${error.message}`
+            });
+        }
+    });
+
     // Register mediafire command
     try {
       registerMediafireCommand({ registerCommand });
@@ -3842,9 +3927,8 @@ ${config.prefix}setvar <key> <value>
       console.error('❌ Failed to register antiwords command:', e && e.message ? e.message : e);
     }
 
-    // Register apk command
+    // Register other commands
     try {
-      registerApkCommand({ registerCommand });
       registerEmojimixCommand({ registerCommand });
       registerEphotoCommands({ registerCommand });
       registerOtplockCommand({ registerCommand });

@@ -5,11 +5,11 @@ const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_
             const categories = {
                 '🎭 Meme': ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner', 'cry', 'bite', 'happy', 'pat'],
                 '🔞 NSFW': ['goon1', 'goon2'],
-                '🎬 Media & Stickers': ['sticker', 'sticker2', 'simage', 'gif', 'yts', 'ytvideo', 'movie', 'movies', 'tiktok', 'lyrics'],
+                '🎬 Media & Stickers': ['sticker', 'sticker2', 'simage', 'gif', 'yts', 'ytvideo', 'movie', 'movies', 'tiktok'],
                 '🤖 AI': ['gemini', 'chatgpt', 'img'],
                 '👥 Group': ['add', 'kick', 'kickall', 'kickgroup', 'promote', 'demote', 'tag', 'tagall', 'invite', 'mute', 'unmute', 'welcome', 'autostatus', 'warn', 'resetwarn', 'antilink', 'revoke', 'ginfo', 'join'],
                 '🛠️ Tools': ['alive', 'weather', 'translate', 'textmaker', 'fancy', 'fancytext', 'emojimix', 'repo', 'getjid', 'savejid'],
-                '🎵 Audio': ['cut', 'bass', 'speed'],
+                '🎵 Audio': ['cut', 'bass', 'speed', 'lyrics'],
                 '👑 Owner': ['sudo', 'otplock', 'schedule', 'schedules', 'schedulecancel', 'pp', 'setvar', 'wapresence']
             };
 
