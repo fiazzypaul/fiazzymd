@@ -7,7 +7,7 @@ const path = require('path');
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
 
 const AXIOS_DEFAULTS = {
-    timeout: 60000,
+    timeout: 180000, // Increased to 180s
     headers: {
         'User-Agent': UA,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -82,7 +82,7 @@ async function downloadFile(url, title, ext = '.mp3') {
 
         const response = await axios.get(url, {
             responseType: 'stream',
-            timeout: 120000,
+            timeout: 300000, // Increased to 300s for large files
             headers: {
                 'User-Agent': UA,
                 'Accept': '*/*',
@@ -121,10 +121,12 @@ async function downloadFile(url, title, ext = '.mp3') {
  * Store search session for a user
  * @param {string} userId - User JID
  * @param {Array} results - Search results
+ * @param {string} command - Originating command (yts or ytvideo)
  */
-function storeSearchSession(userId, results) {
+function storeSearchSession(userId, results, command = 'yts') {
     searchSessions.set(userId, {
         results: results,
+        command: command,
         timestamp: Date.now()
     });
 

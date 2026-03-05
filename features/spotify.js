@@ -11,7 +11,7 @@ const UA =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36';
 
 const AXIOS_DEFAULTS = {
-    timeout: 60000,
+    timeout: 180000, // Increased to 180s
     headers: {
         'User-Agent': UA,
         Accept: 'application/json, text/plain, */*',

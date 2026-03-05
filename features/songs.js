@@ -7,7 +7,7 @@ const path = require('path');
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
 
 const AXIOS_DEFAULTS = {
-    timeout: 60000,
+    timeout: 180000, // Increased to 180s
     headers: {
         'User-Agent': UA,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -62,7 +62,7 @@ async function downloadSong(url, title) {
 
         const response = await axios.get(url, {
             responseType: 'stream',
-            timeout: 60000,
+            timeout: 300000, // Increased to 300s
             headers: {
                 'User-Agent': UA,
                 'Accept': '*/*',

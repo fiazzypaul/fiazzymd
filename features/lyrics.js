@@ -28,7 +28,7 @@ async function lyricsCommand(sock, msg, query) {
         
         try {
             const response = await axios.get(url, {
-                timeout: 30000,
+                timeout: 180000, // Increased to 180s
                 validateStatus: (status) => status < 500, // Handle 500+ as errors in catch
                 headers: {
                     'User-Agent': UA,

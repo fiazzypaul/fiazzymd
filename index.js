@@ -1741,7 +1741,7 @@ ${config.prefix}setvar <key> <value>
             }
 
             const storageKeyVid = `${chatId}:${userId}`;
-            ytvideo.storeSearchSession(storageKeyVid, results);
+            ytvideo.storeSearchSession(storageKeyVid, results, 'ytvideo');
 
             const resultsText = ytvideo.formatSearchResults(results, query);
             await sock.sendMessage(chatId, { text: resultsText }, { quoted: msg });
@@ -2499,7 +2499,7 @@ ${config.prefix}setvar <key> <value>
             }
 
             const storageKeyVid = `${chatId}:${userId}`;
-            ytvideo.storeSearchSession(storageKeyVid, results);
+            ytvideo.storeSearchSession(storageKeyVid, results, 'yts');
 
             const resultsText = ytvideo.formatSearchResults(results, q);
             await sock.sendMessage(chatId, { text: resultsText }, { quoted: msg });
@@ -3301,9 +3301,8 @@ ${config.prefix}setvar <key> <value>
                     const selected = videoSession.results[num - 1];
 
                     try {
-                        // Determine command based on session or search result type
-                        // For yts, we use MP3. For ytvideo search, we use MP4.
-                        const isYtVideoCommand = lastUsedCommand === 'ytvideo';
+                        // Determine command based on session data
+                        const isYtVideoCommand = videoSession.command === 'ytvideo';
                         
                         if (isYtVideoCommand) {
                             await sock.sendMessage(chatId, {
