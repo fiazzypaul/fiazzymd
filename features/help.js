@@ -5,7 +5,7 @@ const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_
             const categories = {
                 '🎭 Meme': ['kill', 'hug', 'kiss', 'slap', 'punch', 'party', 'winner', 'cry', 'bite', 'happy', 'pat'],
                 '🔞 NSFW': ['goon1', 'goon2'],
-                '🎬 Media & Stickers': ['sticker', 'sticker2', 'simage', 'gif', 'yts', 'ytvideo', 'movie', 'movies'],
+                '🎬 Media & Stickers': ['sticker', 'sticker2', 'simage', 'gif', 'yts', 'ytvideo', 'movie', 'movies', 'tiktok', 'lyrics'],
                 '🤖 AI': ['gemini', 'chatgpt', 'img'],
                 '👥 Group': ['add', 'kick', 'kickall', 'kickgroup', 'promote', 'demote', 'tag', 'tagall', 'invite', 'mute', 'unmute', 'welcome', 'autostatus', 'warn', 'resetwarn', 'antilink', 'revoke', 'ginfo', 'join'],
                 '🛠️ Tools': ['alive', 'weather', 'translate', 'textmaker', 'fancy', 'fancytext', 'emojimix', 'repo', 'getjid', 'savejid'],
@@ -96,6 +96,11 @@ const registerHelpCommand = ({ sock, config, commands, registerCommand, CHANNEL_
             }
             if (primary === 'getjid') {
                 const text = `📖 *${config.prefix}getjid*\n\nShow the current chat JID.`;
+                await sock.sendMessage(msg.key.remoteJid, { text });
+                return;
+            }
+            if (primary === 'lyrics') {
+                const text = `📖 *${config.prefix}lyrics*\n\nSearch for song lyrics.\n\n*Usage:* ${config.prefix}lyrics <song name>\n\n*Example:* ${config.prefix}lyrics faded`;
                 await sock.sendMessage(msg.key.remoteJid, { text });
                 return;
             }

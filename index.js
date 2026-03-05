@@ -67,6 +67,7 @@ const registerOwnerCommands = require('./features/pp');
 const registerMemeCommands = require('./features/meme');
 const registerNsfwCommands = require('./features/nsfw');
 const spotify = require('./features/spotify');
+const lyrics = require('./features/lyrics');
 
 // Bot Configuration from .env
 const config = {
@@ -1766,6 +1767,11 @@ ${config.prefix}setvar <key> <value>
     // Register Audio Editor commands (.bass, .speed)
     registerCommand('bass', 'Increase bass (e.g., .bass 20 or .bass 20%)', async (sock, msg, args) => {
         await bass(sock, msg, args);
+    });
+
+    registerCommand('lyrics', 'Search for song lyrics', async (sock, msg, args) => {
+        const query = args.join(' ').trim();
+        await lyrics.lyricsCommand(sock, msg, query);
     });
 
     registerCommand('speed', 'Change audio speed (e.g., 1.5x, 2x, 0.5x)', async (sock, msg, args) => {
