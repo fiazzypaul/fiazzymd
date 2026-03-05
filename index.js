@@ -1698,81 +1698,52 @@ ${config.prefix}setvar <key> <value>
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `🎬 *YOUTUBE VIDEO DOWNLOADER*\n\n` +
                       `*Usage:* ${config.prefix}ytvideo <search query or YouTube URL>\n\n` +
-                      `*Examples:*\n` +
-                      `${config.prefix}ytvideo funny cats\n` +
-                      `${config.prefix}ytvideo cooking tutorial\n` +
-                      `${config.prefix}ytvideo https://youtu.be/xyz123\n\n` +
-                      `💡 After search, reply with a number (1-5) to download`
+                      `💡 After search, reply with a number (1-10) to download as MP4`
             });
             return;
         }
 
         const query = args.join(' ');
         const userId = msg.key.participant || msg.key.remoteJid;
+        const chatId = msg.key.remoteJid;
 
         try {
             // Check if it's a YouTube URL
             if (youtube.isYTUrl(query)) {
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `🎬 *STREAMING VIDEO*\n\n🔍 Getting video information...\n📹 Quality: Best Available (up to 1080p)...\n\n💡 Streaming directly without saving to disk\n⚠️ Bot will continue to respond while streaming`
-                });
+                await sock.sendMessage(chatId, { text: `🎬 *DOWNLOADING MP4*\n\nDownloading this video at best available quality` });
 
-                // Stream video in background without blocking
-                (async () => {
-                    try {
-                        // Use smart streaming (no disk usage)
-                        await ytvideo.sendVideoSmart(sock, msg.key.remoteJid, query, msg, {});
+                const downloadData = await ytvideo.getMp4DownloadUrl(query);
+                const videoFile = await ytvideo.downloadFile(downloadData.url, downloadData.title || 'YouTube Video', '.mp4');
 
-                        console.log('✅ Video sent successfully');
+                await sock.sendMessage(chatId, {
+                    video: { url: videoFile.filePath },
+                    mimetype: 'video/mp4',
+                    fileName: `${videoFile.title}.mp4`,
+                    caption: `✅ *Download Complete!*\n\n🎬 ${videoFile.title}`
+                }, { quoted: msg });
 
-                    } catch (error) {
-                        console.error('Video streaming failed:', error);
-
-                        // Determine error message
-                        let errorMsg = error.message;
-                        if (error.code === 'ENOSPC') {
-                            errorMsg = 'Not enough disk space available. Please free up some space and try again.';
-                        }
-
-                        await sock.sendMessage(msg.key.remoteJid, {
-                            text: `❌ *Download Failed!*\n\n` +
-                                  `Error: ${errorMsg}\n\n` +
-                                  `💡 Try a shorter video or free up disk space`
-                        });
-                    }
-                })();
-
+                await videoFile.cleanup();
                 return;
             }
 
-            // Search for videos
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...`
-            });
-
-            const results = await ytvideo.searchYouTube(query, 5);
+            // Otherwise treat as search
+            await sock.sendMessage(chatId, { text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...` });
+            const results = await ytvideo.searchYouTube(query);
 
             if (!results || results.length === 0) {
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `❌ No videos found for: *${query}*\n\n💡 Try a different search term`
-                });
+                await sock.sendMessage(chatId, { text: `❌ No results found for: *${query}*` });
                 return;
             }
 
-            const storageKeyVid = `${msg.key.remoteJid}:${userId}`;
+            const storageKeyVid = `${chatId}:${userId}`;
             ytvideo.storeSearchSession(storageKeyVid, results);
 
-            // Format and send results
             const resultsText = ytvideo.formatSearchResults(results, query);
-            await sock.sendMessage(msg.key.remoteJid, { text: resultsText });
+            await sock.sendMessage(chatId, { text: resultsText }, { quoted: msg });
 
         } catch (error) {
-            console.error('❌ Video search error:', error);
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to search for videos!\n\n` +
-                      `Error: ${error.message}\n\n` +
-                      `💡 Please try again later`
-            });
+            console.error('❌ YouTube search/download error:', error);
+            await sock.sendMessage(chatId, { text: `❌ Error: ${error.message}` });
         }
     });
 
@@ -2473,15 +2444,55 @@ ${config.prefix}setvar <key> <value>
         await sock.sendMessage(jid, { text: fancytext.getUsageMessage(config.prefix) });
     });
 
-    registerCommand('yts', 'YouTube search results', async (sock, msg, args) => {
+    // YouTube Search Command
+    registerCommand('yts', 'Search YouTube results', async (sock, msg, args) => {
         const q = args.join(' ').trim();
-        const jid = msg.key.remoteJid;
-        if (!q) { await sock.sendMessage(jid, { text: `💡 Usage: ${config.prefix}yts <query or youtube_url>` }); return; }
+        const chatId = msg.key.remoteJid;
+        const userId = msg.key.participant || msg.key.remoteJid;
+        
+        if (!q) { 
+            await sock.sendMessage(chatId, { text: `💡 Usage: ${config.prefix}yts <query or YouTube URL>\n\nAfter search, reply with a number (1-10) to download as MP3` }); 
+            return; 
+        }
+
         try {
-            const text = await ytsFeature.ytsSearchText(q);
-            await sock.sendMessage(jid, { text });
+            // If it's a URL, proceed to direct MP3 download
+            if (youtube.isYTUrl(q)) {
+                await sock.sendMessage(chatId, { text: `🎬 *DOWNLOADING MP3*\n\nDownloading this song at best available quality` });
+
+                const downloadData = await ytvideo.getMp3DownloadUrl(q);
+                const audioFile = await ytvideo.downloadFile(downloadData.download_url, downloadData.title || 'YouTube Audio');
+
+                await sock.sendMessage(chatId, {
+                    audio: { url: audioFile.filePath },
+                    mimetype: 'audio/mpeg',
+                    fileName: `${audioFile.title}.mp3`,
+                    ptt: false
+                }, { quoted: msg });
+
+                await sock.sendMessage(chatId, { text: `✅ *Download Complete!*\n\n🎵 ${audioFile.title}` });
+                await audioFile.cleanup();
+                return;
+            }
+
+            await sock.sendMessage(chatId, { text: `🔍 Searching YouTube for: *${q}*\n\n⏳ Please wait...` });
+
+            const results = await ytvideo.searchYouTube(q);
+
+            if (!results || results.length === 0) {
+                await sock.sendMessage(chatId, { text: `❌ No results found for: *${q}*` });
+                return;
+            }
+
+            const storageKeyVid = `${chatId}:${userId}`;
+            ytvideo.storeSearchSession(storageKeyVid, results);
+
+            const resultsText = ytvideo.formatSearchResults(results, q);
+            await sock.sendMessage(chatId, { text: resultsText }, { quoted: msg });
+
         } catch (e) {
-            await sock.sendMessage(jid, { text: `❌ Failed to search YouTube: ${e.message}` });
+            console.error('❌ YouTube search error:', e);
+            await sock.sendMessage(chatId, { text: `❌ Failed to search YouTube: ${e.message}` });
         }
     });
 
@@ -3221,7 +3232,7 @@ ${config.prefix}setvar <key> <value>
                 }
             }
 
-            // Check for video download reply
+            // Check for video download reply (shared by yts and ytvideo)
             const storageKeyVidReply = `${chatId}:${userId}`;
             const videoSession = ytvideo.getSearchSession(storageKeyVidReply);
             if (videoSession) {
@@ -3229,44 +3240,58 @@ ${config.prefix}setvar <key> <value>
                 const num = parseInt(trimmed);
 
                 if (!isNaN(num) && num >= 1 && num <= videoSession.results.length) {
-                    const selectedVideo = videoSession.results[num - 1];
+                    const selected = videoSession.results[num - 1];
 
-                    // Send streaming message
-                    await sock.sendMessage(chatId, {
-                        text: `🎬 *STREAMING VIDEO*\n\n📝 Title: ${selectedVideo.title}\n\n🔍 Getting video information...\n⏳ Please wait...\n\n💡 Streaming directly without saving to disk\n⚠️ Bot will continue to respond while streaming`
-                    });
-
-                    // Clear session immediately
-                    ytvideo.clearSearchSession(storageKeyVidReply);
-
-                    // Stream video in background without blocking
-                    (async () => {
-                        try {
-                            // Use smart streaming (no disk usage)
-                            await ytvideo.sendVideoSmart(sock, chatId, selectedVideo.url, msg, {
-                                author: selectedVideo.author.name
+                    try {
+                        // Determine command based on session or search result type
+                        // For yts, we use MP3. For ytvideo search, we use MP4.
+                        const isYtVideoCommand = lastUsedCommand === 'ytvideo';
+                        
+                        if (isYtVideoCommand) {
+                            await sock.sendMessage(chatId, {
+                                text: `🎬 *DOWNLOADING MP4*\n\nDownloading: *${selected.title}* at best available quality`
                             });
 
-                            console.log('✅ Video sent successfully');
-
-                        } catch (error) {
-                            console.error('❌ Video streaming error:', error);
-
-                            // Determine error message
-                            let errorMsg = error.message;
-                            if (error.code === 'ENOSPC') {
-                                errorMsg = 'Not enough disk space available. Please free up some space and try again.';
-                            }
+                            const downloadData = await ytvideo.getMp4DownloadUrl(selected.url);
+                            const videoFile = await ytvideo.downloadFile(downloadData.url, downloadData.title || selected.title, '.mp4');
 
                             await sock.sendMessage(chatId, {
-                                text: `❌ Failed to download video!\n\n` +
-                                      `Error: ${errorMsg}\n\n` +
-                                      `💡 Try a shorter video or free up disk space`
-                            });
-                        }
-                    })();
+                                video: { url: videoFile.filePath },
+                                mimetype: 'video/mp4',
+                                fileName: `${videoFile.title}.mp4`,
+                                caption: `✅ *Download Complete!*\n\n🎬 ${videoFile.title}`
+                            }, { quoted: msg });
 
-                    return; // Don't process as a command
+                            await videoFile.cleanup();
+                        } else {
+                            await sock.sendMessage(chatId, {
+                                text: `🎬 *DOWNLOADING MP3*\n\nDownloading: *${selected.title}* at best available quality`
+                            });
+
+                            const downloadData = await ytvideo.getMp3DownloadUrl(selected.url);
+                            const audioFile = await ytvideo.downloadFile(downloadData.download_url, downloadData.title || selected.title);
+
+                            await sock.sendMessage(chatId, {
+                                audio: { url: audioFile.filePath },
+                                mimetype: 'audio/mpeg',
+                                fileName: `${audioFile.title}.mp3`,
+                                ptt: false
+                            }, { quoted: msg });
+
+                            await sock.sendMessage(chatId, { text: `✅ *Download Complete!*\n\n🎵 ${audioFile.title}` });
+                            
+                            await audioFile.cleanup();
+                        }
+                        
+                        ytvideo.clearSearchSession(storageKeyVidReply);
+
+                    } catch (error) {
+                        console.error('❌ YouTube selection error:', error);
+                        await sock.sendMessage(chatId, {
+                            text: `❌ Failed to download selection!\n\nError: ${error.message}`
+                        });
+                    }
+                    return;
                 }
             }
 
