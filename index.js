@@ -66,6 +66,7 @@ const registerHelpCommand = require('./features/help');
 const registerOwnerCommands = require('./features/pp');
 const registerMemeCommands = require('./features/meme');
 const registerNsfwCommands = require('./features/nsfw');
+const spotify = require('./features/spotify');
 
 // Bot Configuration from .env
 const config = {
@@ -1644,75 +1645,42 @@ ${config.prefix}setvar <key> <value>
     });
 
     // Song Download Command
-    registerCommand('song', 'Search and download songs from YouTube', async (sock, msg, args) => {
+    registerCommand('song', 'Search and download songs', async (sock, msg, args) => {
         if (args.length === 0) {
             await sock.sendMessage(msg.key.remoteJid, {
                 text: `🎵 *SONG DOWNLOADER*\n\n` +
-                      `*Usage:* ${config.prefix}song <song name or YouTube URL>\n\n` +
-                      `*Examples:*\n` +
-                      `${config.prefix}song smooth criminal\n` +
-                      `${config.prefix}song shape of you\n` +
-                      `${config.prefix}song https://youtu.be/xyz123\n\n` +
-                      `💡 After search, reply with a number (1-5) to download`
+                      `*Usage:* ${config.prefix}song <song name>\n\n` +
+                      `*Example:*\n` +
+                      `${config.prefix}song Faded\n\n` +
+                      `💡 After search, reply with 1 to download or 2 to cancel`
             });
             return;
         }
 
         const query = args.join(' ');
         const userId = msg.key.participant || msg.key.remoteJid;
+        const chatId = msg.key.remoteJid;
 
         try {
-            // Check if it's a YouTube URL
-            if (youtube.isYTUrl(query)) {
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `🎵 *DOWNLOADING SONG*\n\n⏳ Please wait, downloading audio...\n🎧 Converting to MP3 format...`
-                });
-
-                const audioData = await songs.downloadAudio(query, 'YouTube Audio');
-
-                // Send from local file
-                await sock.sendMessage(msg.key.remoteJid, {
-                    audio: { url: audioData.filePath },
-                    mimetype: 'audio/mpeg',
-                    fileName: `${audioData.title}.mp3`,
-                    ptt: false
-                }, { quoted: msg });
-
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `✅ *Download Complete!*\n\n🎵 ${audioData.title}\n👤 ${audioData.channel}`
-                });
-
-                // Delete file after sending
-                await audioData.cleanup();
-                return;
-            }
-
-            // Search for songs
-            await sock.sendMessage(msg.key.remoteJid, {
+            await sock.sendMessage(chatId, {
                 text: `🔍 Searching for: *${query}*\n\n⏳ Please wait...`
             });
 
-            const results = await songs.searchYouTube(query, 5);
+            const result = await songs.searchSong(query);
 
-            if (!results || results.length === 0) {
-                await sock.sendMessage(msg.key.remoteJid, {
-                    text: `❌ No songs found for: *${query}*\n\n💡 Try a different search term`
-                });
-                return;
-            }
+            const storageKeySong = `${chatId}:${userId}`;
+            songs.storeSearchSession(storageKeySong, result);
 
-            const chatIdStore = msg.key.remoteJid;
-            const storageKeySong = `${chatIdStore}:${userId}`;
-            songs.storeSearchSession(storageKeySong, results);
-
-            // Format and send results
-            const resultsText = songs.formatSearchResults(results, query);
-            await sock.sendMessage(msg.key.remoteJid, { text: resultsText });
+            // Send thumbnail with options
+            await sock.sendMessage(chatId, {
+                image: { url: result.thumbnail },
+                caption: songs.formatSearchResult(result)
+            }, { quoted: msg });
 
         } catch (error) {
             console.error('❌ Song search error:', error);
-            await sock.sendMessage(msg.key.remoteJid, {
-                text: `❌ Failed to search for songs!\n\n` +
+            await sock.sendMessage(chatId, {
+                text: `❌ Failed to search for song!\n\n` +
                       `Error: ${error.message}\n\n` +
                       `💡 Please try again later`
             });
@@ -2624,8 +2592,12 @@ ${config.prefix}setvar <key> <value>
     });
 
     // .song command removed by owner request
-
+    
     // .video command removed by owner request
+
+    registerCommand('spotify', 'Search and download Spotify tracks via Yupra', async (sock, msg, args) => {
+        await spotify.spotifyCommand(sock, msg, args);
+    });
 
     registerCommand('movie', 'Search and get movie recommendations', async (sock, msg, args) => {
         const jid = msg.key.remoteJid;
@@ -3134,6 +3106,10 @@ ${config.prefix}setvar <key> <value>
             console.log('🔍 Prefix:', config.prefix);
             console.log('🔍 Starts with prefix?', messageText.startsWith(config.prefix));
 
+            // User/chat ids for downstream handlers
+            const userId = msg.key.participant || msg.key.remoteJid;
+            const chatId = msg.key.remoteJid;
+
             // Check for emojimix sticker session (before prefix and command processing)
             try {
                 const storageKeyEmojiMix = `${chatId}:${userId}`;
@@ -3168,29 +3144,23 @@ ${config.prefix}setvar <key> <value>
             }
 
             // Check for song download number reply (before prefix check)
-            const userId = msg.key.participant || msg.key.remoteJid;
-            const chatId = msg.key.remoteJid;
 
             // Check for song download reply
             const storageKeySongReply = `${chatId}:${userId}`;
             const songSession = songs.getSearchSession(storageKeySongReply);
             if (songSession) {
                 const trimmed = messageText.trim();
-                const num = parseInt(trimmed);
-
-                if (!isNaN(num) && num >= 1 && num <= songSession.results.length) {
-                    const selectedVideo = songSession.results[num - 1];
-
+                
+                if (trimmed === '1') {
+                    const result = songSession.result;
                     try {
-                        // Send download message
                         await sock.sendMessage(chatId, {
-                            text: songs.formatDownloadMessage(selectedVideo.title)
+                            text: `🎵 *DOWNLOADING SONG*\n\n📝 Title: ${result.title}\n⏳ Please wait...`
                         });
 
-                        // Download audio to file
-                        const audioData = await songs.downloadAudio(selectedVideo.url, selectedVideo.title);
+                        const audioData = await songs.downloadSong(result.audio.download_url, result.title);
 
-                        // Send the audio file from local file
+                        // Send the audio file
                         await sock.sendMessage(chatId, {
                             audio: { url: audioData.filePath },
                             mimetype: 'audio/mpeg',
@@ -3199,9 +3169,7 @@ ${config.prefix}setvar <key> <value>
                         }, { quoted: msg });
 
                         await sock.sendMessage(chatId, {
-                            text: `✅ *Download Complete!*\n\n` +
-                                  `🎵 ${audioData.title}\n` +
-                                  `👤 ${audioData.channel || selectedVideo.author.name}`
+                            text: `✅ *Download Complete!*\n\n🎵 ${audioData.title}\n⏱️ Duration: ${result.duration}`
                         });
 
                         // Delete file after sending
@@ -3214,11 +3182,42 @@ ${config.prefix}setvar <key> <value>
                         console.error('❌ Song download error:', error);
                         await sock.sendMessage(chatId, {
                             text: `❌ Failed to download song!\n\n` +
-                                  `Error: ${error.message}\n\n` +
-                                  `💡 Please try searching again with ${config.prefix}song`
+                                  `Error: ${error.message}`
                         });
                     }
-                    return; // Don't process as a command
+                    return;
+                } else if (trimmed === '2') {
+                    await sock.sendMessage(chatId, { text: '❌ Download cancelled.' });
+                    songs.clearSearchSession(storageKeySongReply);
+                    return;
+                }
+            }
+
+            // Check for Spotify download reply
+            const storageKeySpotifyReply = `${chatId}:${userId}`;
+            const spotifySession = spotify.getSearchSession(storageKeySpotifyReply);
+            if (spotifySession) {
+                const trimmed = messageText.trim();
+                const num = parseInt(trimmed);
+
+                if (!isNaN(num) && num >= 1 && num <= spotifySession.results.length) {
+                    const selectedTrack = spotifySession.results[num - 1];
+
+                    try {
+                        await sock.sendMessage(chatId, {
+                            text: `🎵 Downloading: ${selectedTrack.name || 'Unknown title'} - ${selectedTrack.artist || ''}\n⏳ Please wait...`
+                        });
+
+                        await spotify.downloadTrackSelection(sock, chatId, msg, selectedTrack);
+
+                        spotify.clearSearchSession(storageKeySpotifyReply);
+                    } catch (error) {
+                        console.error('❌ Spotify download error:', error);
+                        await sock.sendMessage(chatId, {
+                            text: '❌ Failed to download Spotify track.\n\nPlease try searching again with .spotify'
+                        });
+                    }
+                    return;
                 }
             }
 

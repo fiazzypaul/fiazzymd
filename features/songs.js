@@ -1,12 +1,23 @@
-const youtube = require('../lib/youtube');
-const ytmp3 = require('../lib/ytmp3');
 const axios = require('axios');
 const fs = require('fs');
 const fsPromises = require('fs/promises');
 const path = require('path');
-const { exec } = require('child_process');
-const { promisify } = require('util');
-const execPromise = promisify(exec);
+
+// UA for API requests
+const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
+
+const AXIOS_DEFAULTS = {
+    timeout: 60000,
+    headers: {
+        'User-Agent': UA,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'Accept-Encoding': 'identity',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Referer': 'https://apis.davidcyril.name.ng/endpoints/download.html'
+    }
+};
 
 // Store user search sessions
 const searchSessions = new Map();
@@ -18,79 +29,48 @@ if (!fs.existsSync(downloadsDir)) {
 }
 
 /**
- * Search YouTube for songs
+ * Search for a song using David Cyril API
  * @param {string} query - Search query
- * @param {number} limit - Number of results (default 5)
- * @returns {Promise<Array>} Search results
+ * @returns {Promise<Object>} Search result
  */
-async function searchYouTube(query, limit = 5) {
+async function searchSong(query) {
+    const url = `https://apis.davidcyril.name.ng/song?query=${encodeURIComponent(query)}&apikey=`;
     try {
-        const results = await youtube.search(query);
-        return results.slice(0, limit);
+        const response = await axios.get(url, AXIOS_DEFAULTS);
+        if (response.data && response.data.status && response.data.result) {
+            return response.data.result;
+        }
+        throw new Error('Song not found or API error');
     } catch (error) {
-        console.error('YouTube search error:', error);
-        throw new Error('Failed to search YouTube');
+        console.error('David Cyril API search error:', error.message);
+        throw new Error('Failed to search for song');
     }
 }
 
 /**
- * Format search results for display
- * @param {Array} results - Search results
- * @param {string} query - Original search query
- * @returns {string} Formatted message
+ * Download song from direct URL
+ * @param {string} url - Direct MP3 download URL
+ * @param {string} title - Song title
+ * @returns {Promise<Object>} { filePath, title, cleanup }
  */
-function formatSearchResults(results, query) {
-    let message = '🎵 *YOUTUBE SONG SEARCH*\n\n';
-    message += `📝 Query: "${query}"\n`;
-    message += `📊 Found ${results.length} results\n\n`;
-    message += '━━━━━━━━━━━━━━━━━━━━\n\n';
-
-    results.forEach((video, index) => {
-        const duration = formatDuration(video.timestamp);
-        message += `*${index + 1}.* ${video.title}\n`;
-        message += `   👤 ${video.author.name}\n`;
-        message += `   ⏱️ ${duration}\n`;
-        message += `   👁️ ${formatViews(video.views)}\n\n`;
-    });
-
-    message += '━━━━━━━━━━━━━━━━━━━━\n\n';
-    message += '💡 *Reply with a number (1-5) to download that song*';
-
-    return message;
-}
-
-/**
- * Get YouTube audio download data
- * @param {string} url - YouTube video URL
- * @param {string} title - Video title (for filename)
- * @returns {Promise<Object>} { filePath, title, thumbnail, channel, cleanup }
- */
-async function downloadAudio(url, title) {
+async function downloadSong(url, title) {
     try {
-        // Get download link from API
-        const result = await ytmp3(url);
-        const downloadUrl = result.url;
-
-        // Create safe filename
-        const safeTitle = title.replace(/[^\w\s-]/g, '').trim().substring(0, 100);
+        const safeTitle = title.replace(/[^\w\s-]/g, '').trim().substring(0, 100) || 'song';
         const timestamp = Date.now();
         const filename = `${safeTitle}_${timestamp}.mp3`;
         const filePath = path.join(downloadsDir, filename);
-        const tempPath = path.join(downloadsDir, `${safeTitle}_${timestamp}.src`);
 
-        // Download raw audio to temp file
-        console.log('📥 Downloading raw audio to:', tempPath);
-        const response = await axios.get(downloadUrl, {
+        const response = await axios.get(url, {
             responseType: 'stream',
-            timeout: 120000, // 2 minutes
-            maxContentLength: 100 * 1024 * 1024, // 100MB limit
-            decompress: true,
+            timeout: 60000,
             headers: {
+                'User-Agent': UA,
+                'Accept': '*/*',
                 'Accept-Encoding': 'identity'
             }
         });
 
-        const writer = fs.createWriteStream(tempPath);
+        const writer = fs.createWriteStream(filePath);
         response.data.pipe(writer);
 
         await new Promise((resolve, reject) => {
@@ -98,37 +78,21 @@ async function downloadAudio(url, title) {
             writer.on('error', reject);
         });
 
-        console.log('✅ Raw audio downloaded, converting to MP3 with ffmpeg...');
-
-        // Convert to proper MP3 so WhatsApp can play it
-        await execPromise(`ffmpeg -y -i "${tempPath}" -vn -acodec libmp3lame -q:a 2 "${filePath}"`);
-
-        // Cleanup temp source file
-        try {
-            await fsPromises.unlink(tempPath);
-        } catch (e) {
-            console.error('Failed to delete temp audio file:', e);
-        }
-
-        console.log('✅ Audio converted to MP3:', filePath);
-
-        // Return file path and cleanup function
         return {
             filePath: filePath,
-            title: result.title || title,
-            thumbnail: result.thumbnail,
-            channel: result.channel,
+            title: title,
             cleanup: async () => {
                 try {
-                    await fsPromises.unlink(filePath);
-                    console.log('🗑️ Deleted:', filePath);
+                    if (fs.existsSync(filePath)) {
+                        await fsPromises.unlink(filePath);
+                    }
                 } catch (err) {
                     console.error('Failed to delete file:', err);
                 }
             }
         };
     } catch (error) {
-        console.error('Download error:', error);
+        console.error('Download error:', error.message);
         throw new Error('Failed to download audio');
     }
 }
@@ -136,11 +100,11 @@ async function downloadAudio(url, title) {
 /**
  * Store search session for a user
  * @param {string} userId - User JID
- * @param {Array} results - Search results
+ * @param {Object} result - API search result
  */
-function storeSearchSession(userId, results) {
+function storeSearchSession(userId, result) {
     searchSessions.set(userId, {
-        results: results,
+        result: result,
         timestamp: Date.now()
     });
 
@@ -168,40 +132,26 @@ function clearSearchSession(userId) {
 }
 
 /**
- * Format duration string
+ * Format search result for display
+ * @param {Object} result - API search result
+ * @returns {string} Formatted message
  */
-function formatDuration(timestamp) {
-    return timestamp || 'Unknown';
-}
-
-/**
- * Format view count
- */
-function formatViews(views) {
-    if (views >= 1000000) {
-        return `${(views / 1000000).toFixed(1)}M views`;
-    } else if (views >= 1000) {
-        return `${(views / 1000).toFixed(1)}K views`;
-    }
-    return `${views} views`;
-}
-
-/**
- * Format download progress message
- */
-function formatDownloadMessage(title) {
-    return `🎵 *DOWNLOADING SONG*\n\n` +
-           `📝 Title: ${title}\n\n` +
-           `⏳ Please wait, downloading audio...\n` +
-           `🎧 Converting to MP3 format...`;
+function formatSearchResult(result) {
+    let message = `🎵 *SONG FOUND*\n\n`;
+    message += `📝 *Title:* ${result.title}\n`;
+    message += `⏱️ *Duration:* ${result.duration || 'Unknown'}\n`;
+    message += `👁️ *Views:* ${result.views?.toLocaleString() || 'Unknown'}\n\n`;
+    message += `1️⃣ *Download MP3*\n`;
+    message += `2️⃣ *Cancel*\n\n`;
+    message += `💡 *Reply with 1 or 2 to choose an option*`;
+    return message;
 }
 
 module.exports = {
-    searchYouTube,
-    formatSearchResults,
-    downloadAudio,
+    searchSong,
+    downloadSong,
+    formatSearchResult,
     storeSearchSession,
     getSearchSession,
-    clearSearchSession,
-    formatDownloadMessage
+    clearSearchSession
 };
