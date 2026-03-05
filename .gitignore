@@ -29,6 +29,4 @@ docs/
 temp/
 tmp/
 /data/
-scripts/*.mp4
-/scripts/*.json
-scripts
+scripts/
